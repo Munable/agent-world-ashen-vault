@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>灰烬地城 · 规则验收场</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10171b;color:#e6e4dc}*{box-sizing:border-box}
+body{margin:0}main{max-width:1160px;margin:auto;padding:28px}h1{font-size:clamp(24px,4vw,38px);margin:8px 0}
+a{color:#adc4da}.eyebrow{letter-spacing:.14em;color:#bd9972;font-size:12px}.scope{line-height:1.7;color:#b9c3c7;max-width:850px}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(270px,1fr);gap:18px;margin-top:24px}
+.panel{background:#192229;border:1px solid #33434b;border-radius:12px;padding:18px;min-width:0}svg{width:100%;display:block;aspect-ratio:14/8}
+#status{padding:8px 0;color:#d9b486}#window{background:#33302a;padding:12px;line-height:1.6;border-radius:6px}
+.actor{padding:14px 0;border-top:1px solid #3a4850}.actor strong{display:block;margin-bottom:8px}.small{font-size:13px;color:#b4bec1;line-height:1.7}
+ol{padding-left:22px;max-height:340px;overflow:auto;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+footer{padding:20px 0;font-size:12px;color:#acb6bd;line-height:1.7}#error{color:#f1b3a8}h2{font-size:17px;margin-top:0}
+@media(max-width:750px){main{padding:16px}.layout{grid-template-columns:1fr}.panel{padding:12px}}
+</style></head><body><main>
+<div class="eyebrow">ASHEN VAULT / M1 RULES LABORATORY</div><h1>灰烬地城 · 门厅验收场</h1>
+<p class="scope">SRD 5.2.1 规则实现的第一段验收。当前是两个固定近战 NPC 配置，不是完整 D&D 游戏；三个职业、法术和地城探索尚未开放。此页面只读，所有位置、掷骰与伤害由服务器裁定。</p>
+<div id="status" role="status">正在读取世界…</div><div id="error" role="alert"></div>
+<div class="layout"><section class="panel"><h2>战斗场景 <span class="small">每格 5 英尺 · 明亮环境</span></h2>
+<svg id="board" viewBox="0 0 560 320" role="img" aria-label="战斗网格"></svg>
+<p class="small">实心格不可通行，斜纹格为困难地形。移动等待反应时停在离开触及范围之前，不把“已受理”画成“已到达”。</p>
+<div id="window" hidden></div></section><aside class="panel"><h2>服务器状态</h2><div id="actors"></div><h2>裁决记录</h2><ol id="events"></ol></aside></div>
+<footer>可通过 <a href="/agent">Agent 接入指南</a>读取当前可用接口。回合不按现实时间自动跳过。页面不接收、不存储身份令牌。<br>
+This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at <a href="https://www.dndbeyond.com/srd" rel="noreferrer">https://www.dndbeyond.com/srd</a>. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at <a href="https://creativecommons.org/licenses/by/4.0/legalcode" rel="noreferrer">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</footer>
+<script src="/watch.js" defer></script></main></body></html>

@@ -1,0 +1,29 @@
+{
+  "milestone": "M1-melee-laboratory",
+  "version": "0.1.0a1",
+  "ruleset": "SRD 5.2.1",
+  "kernel_commit": "422fc56fd63d383fb4dd262981810d88e5db0c73",
+  "kernel_modified": false,
+  "unit_tests": 83,
+  "unit_result": "passed",
+  "browser": {
+    "public_observer": true,
+    "server_movement": true,
+    "pause_before_departure": true,
+    "reaction_persists_after_process_restart": true,
+    "off_turn_reaction": true,
+    "declined_reaction_not_spent": true,
+    "replayed_reaction_not_reapplied": true,
+    "no_browser_credentials": true,
+    "no_persistent_browser_storage": true,
+    "mobile_no_overflow": true,
+    "page_errors": []
+  },
+  "wheel_build": "passed",
+  "syntax_checks": "passed",
+  "source_credentials_scan": "no credential literals found",
+  "autonomous_model_tests": 0,
+  "full_dungeon_complete": false,
+  "three_level_3_classes_complete": false,
+  "evidence_scope": "Deterministic rules/engine/HTTP tests plus real MCP, process restart, and public browser checks. Not full SRD conformance."
+}
