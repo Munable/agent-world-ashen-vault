@@ -211,7 +211,7 @@ def end_turn(ctx,args):return _combat(ctx,args,'end_turn')
 
 def rest_request(ctx,args):
     state=load_party(ctx,args['party_id']);seat=_require_member(state,ctx)
-    if state['phase']=='active':raise RuleViolation('FinishEncounterBeforePartyRest')
+    if state['phase'] not in ('complete','retired'):raise RuleViolation('FinishEncounterBeforePartyRest')
     kind=args['kind'];state['rest_requests'][seat]=kind
     requested=set(state['rest_requests'])
     all_seats=set(state['members'])
