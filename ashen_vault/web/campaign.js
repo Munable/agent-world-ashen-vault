@@ -2,7 +2,7 @@ import {Playback} from '/campaign-player.js';
 const $=q=>document.querySelector(q),ns='http://www.w3.org/2000/svg';
 const manifest=await fetch('/campaign-assets.json',{credentials:'omit'}).then(r=>r.json());
 let token='',control=true,cursor=null,busy=false,syncing=null,pending=null,clockServer=0,clockLocal=0,generation=0,observation=0;
-const labels={'campaign.joined':'远征开始','campaign.travel':'正在前往下一片区域','campaign.combat':'战斗裁决','campaign.reward':'奖励已结算','campaign.encounter':'遭遇开始','campaign.ending':'远征结果','campaign.objective':'目标变化','campaign.check_result':'检定结果','campaign.check':'检定','campaign.tactical_mind':'战术头脑','campaign.healing':'恢复','campaign.ability':'职业能力','campaign.level_up':'升级','campaign.equipment':'装备准备','campaign.rest':'休息完成','campaign.retreat':'撤退','campaign.item':'拾取火种','campaign.state_changed':'状态更新'};
+const labels={'campaign.spell':'施法裁决','campaign.joined':'远征开始','campaign.travel':'正在前往下一片区域','campaign.combat':'战斗裁决','campaign.reward':'奖励已结算','campaign.encounter':'遭遇开始','campaign.ending':'远征结果','campaign.objective':'目标变化','campaign.check_result':'检定结果','campaign.check':'检定','campaign.tactical_mind':'战术头脑','campaign.healing':'恢复','campaign.ability':'职业能力','campaign.level_up':'升级','campaign.equipment':'装备准备','campaign.rest':'休息完成','campaign.retreat':'撤退','campaign.item':'拾取火种','campaign.state_changed':'状态更新'};
 function svg(name,attrs={},text){const el=document.createElementNS(ns,name);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el;}
 function actorGlyph(id,actor,skin){
  const [x,y]=actor.position.map(n=>n*40+20),g=svg('g',{'data-actor':id,'data-position':actor.position.join(',')});
@@ -36,9 +36,19 @@ function render(scene,fx,skinId){
   }
   if(fx?.text){board.append(svg('rect',{x:110,y:36,width:340,height:50,rx:9,fill:'#112126',opacity:.96}));board.append(svg('text',{x:280,y:69,'text-anchor':'middle',fill:skin.accent,'font-size':23,'data-effect':'feedback'},fx.text));}
   const h=scene.entities.hero;
-  $('#stats').textContent=`战士 ${m.level} 级 · HP ${h.hp}/${h.max_hp} · AC ${h.ac}\n经验 ${m.xp}/300 · 金币 ${m.gold} · 药水 ${m.potions}\n第二风息 ${m.second_wind}/2 · 动作如潮 ${m.action_surge} · 生命骰 ${m.hit_dice}\n${m.battle?'第 '+m.battle.round+' 轮，当前 '+m.battle.active+'，移动 '+h.movement+' 英尺':'世界内已过 '+Math.floor(m.minutes)+' 分钟'}`;
-  $('#stats').style.whiteSpace='pre-line';$('#xp').value=Math.min(300,m.xp);$('#quest').textContent=m.quest;$('#room-text').textContent=m.text;
-  $('#details').textContent=`${m.build.species} / ${m.build.background}\n${m.build.ability_source}\n专长 ${m.build.origin_feat} · 风格 ${m.style}\n语言 ${m.build.languages.join(' / ')} · 工具 ${m.build.tool}\n当前武器 ${m.weapon} · 1d${h.damage_die}+${h.damage_bonus} · Sap\n本切片在特定场景兑现 Brave、Naturally Stealthy、木匠工具与已选技能；这不是完整 Hide/Search/Help/Ready 动作集。远程和施法仍未开放。\n`+JSON.stringify(m.build.skills);
+  const className={fighter:'Fighter',rogue:'Rogue',wizard:'Wizard'}[m.class_key]||m.build.class||'角色';
+  const next=m.next_xp;
+  const resource=m.class_key==='fighter'?(`第二风息 ${m.second_wind}/2 · 动作如潮 ${m.action_surge}`):
+    m.class_key==='wizard'?(`法术位 1环 ${m.spell_slots?.['1']||0} · 2环 ${m.spell_slots?.['2']||0} · 奥术恢复 ${m.arcane_recovery}`):
+    (`偷袭 ${h.sneak_attack_dice||1}d6 · ${m.level>=2?'灵巧动作已开放':'灵巧动作 2 级开放'}`);
+  $('#stats').textContent=`${className} ${m.level} 级 · HP ${h.hp}/${h.max_hp} · AC ${h.ac}\n经验 ${m.xp}${next?'/'+next:''} · 金币 ${m.gold} · 药水 ${m.potions}\n${resource} · 生命骰 ${m.hit_dice}\n${m.battle?'第 '+m.battle.round+' 轮，当前 '+m.battle.active+'，移动 '+h.movement+' 英尺':'世界内已过 '+Math.floor(m.minutes)+' 分钟'}`;
+  $('#stats').style.whiteSpace='pre-line';$('#xp').max=next||Math.max(900,m.xp||1);$('#xp').value=m.xp;$('#quest').textContent=m.quest;$('#room-text').textContent=m.text;
+  const style=m.style?' · 风格 '+m.style:'';
+  const mastery=h.mastery?' · '+h.mastery.toUpperCase():'';
+  const spellNote=m.class_key==='wizard'?'已实现法术：Mage Armor / Magic Missile / Ray of Frost；其他法术不会被近似执行。':
+    m.class_key==='rogue'?'已实现 Sneak Attack、Vex、Cunning Action，并在 3 级开放 Steady Aim。':
+    '已实现 Second Wind、Action Surge、Tactical Mind，并在 3 级开放 Champion 规则。';
+  $('#details').textContent=`${m.build.species} / ${m.build.background}\n${m.build.ability_source}\n专长 ${m.build.origin_feat}${style}\n语言 ${m.build.languages.join(' / ')} · 工具 ${m.build.tool}\n当前武器 ${m.weapon} · 1d${h.damage_die}${h.damage_bonus>=0?'+':''}${h.damage_bonus}${mastery}\n${spellNote}\n`+JSON.stringify(m.build.skills);
   $('#ending').hidden=!m.ending;$('#ending').textContent=m.ending||'';
  } else {$('#stats').textContent='原身份已验证；开始冒险不会创建第二个身份。';$('#quest').textContent='准备角色与委托';$('#room-text').textContent='';}
  $('#caption').textContent=fx?labels[fx.kind]||fx.kind:m.battle?.pending?'等待玩家反应，不会自动放弃。':m.pending_check?'等待检定决定，结果尚未最终结算。':m.joined?'服务器事实已同步。':'首次初始化角色挂接数据。';
@@ -63,6 +73,7 @@ function addLogs(events){
    const r=d.result,a=r?.attack_result||(r?.attack?r:null);label=(d.origin==='scripted_npc'?'脚本 NPC':'玩家行动')+' · '+d.command;
    if(a)label+=` · d20 ${a.attack.dice.join('/')} +${a.attack.modifier} = ${a.attack.total} · ${a.hit?'命中，伤害 '+a.damage:'未命中'}`;
   }
+  if(e.cue.name==='campaign.spell'){const r=d.result;label=r.spell+(r.damage!==undefined?' · '+r.damage+' 伤害':'');}
   if(e.cue.name==='campaign.check'){
    const t=d.test,mode=t?.mode==='advantage'?'优势 · ':t?.mode==='disadvantage'?'劣势 · ':'';
    label=`${d.check} · ${mode}d20 ${t.dice.join('/')} ${t.modifier>=0?'+':''}${t.modifier} = ${t.total}`;
