@@ -96,7 +96,7 @@ def main():
         expect(page.locator('#stats')).to_contain_text('经验 300/300')
         observe_effect('feedback');click('level_up',wait=False,style='defense');saw_effect()
         page.screenshot(path=str(output/'campaign-level-feedback.png'),full_page=True)
-        ready();expect(page.locator('#stats')).to_contain_text('战士 2 级')
+        ready();expect(page.locator('#stats')).to_contain_text('Fighter 2 级')
         expect(page.locator('#stats')).to_contain_text('HP 12/20')
         before=page.evaluate('window.__ashenDebug()');page.select_option('#skin','moon');after=page.evaluate('window.__ashenDebug()')
         assert before['revision']==after['revision'] and before['level']==after['level']
@@ -106,7 +106,7 @@ def main():
         # Actual process restart and a new browser document use only the saved key.
         server.stop();server.start();page.reload(wait_until='networkidle')
         expect(page.locator('#game')).to_be_hidden();assert page.locator('#details').inner_text()==''
-        connect();expect(page.locator('#stats')).to_contain_text('战士 2 级')
+        connect();expect(page.locator('#stats')).to_contain_text('Fighter 2 级')
         assert page.evaluate('window.__ashenDebug().stats.animated')==0
         report['reload_and_process_restart_restore_without_historical_animation']=True
         click('rest',kind='long')
@@ -137,9 +137,17 @@ def main():
         else:raise AssertionError('Browser policy did not reach terminal state')
         assert attack_feedback and used_surge
         expect(page.locator('#ending')).to_be_visible()
-        expect(page.locator('#stats')).to_contain_text('经验 300/300')
+        expect(page.locator('#stats')).to_contain_text('经验 900/900')
+        before_three=page.locator('#stats').inner_text()
+        click('level_up')
+        expect(page.locator('#stats')).to_contain_text('Fighter 3 级')
+        after_three=page.locator('#stats').inner_text()
+        import re
+        hp_before=re.search(r'HP (\d+)/(\d+)',before_three);hp_after=re.search(r'HP (\d+)/(\d+)',after_three)
+        assert hp_before and hp_after and hp_before.group(1)==hp_after.group(1)
         report.update(visible_attack_feedback=True,upgraded_action_surge_used_in_later_encounter=True,
-                      solo_scripted_enemy=True,terminal_result_observed=True)
+                      solo_scripted_enemy=True,terminal_result_observed=True,actual_browser_growth_1_to_3=True,
+                      level_three_has_no_free_healing=True)
         page.screenshot(path=str(output/'campaign-desktop.png'),full_page=True)
         page.set_viewport_size({'width':390,'height':844})
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
