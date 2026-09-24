@@ -15,7 +15,8 @@ def schema(props=None, required=()):
     return {'type':'object','properties':props or {},'required':list(required),'additionalProperties':False}
 
 
-PARTY_ID={'type':'string','minLength':8,'maxLength':24,'pattern':'^[a-f0-9]+INVITE={'type':'string','minLength':16,'maxLength':64}
+PARTY_ID={'type':'string','minLength':8,'maxLength':24,'pattern':'^[a-f0-9]+$'}
+INVITE={'type':'string','minLength':16,'maxLength':64}
 CLASS={'type':'string','enum':['fighter','rogue','wizard']}
 TURN={'type':'integer','minimum':1}
 BOOL={'type':'boolean'}
