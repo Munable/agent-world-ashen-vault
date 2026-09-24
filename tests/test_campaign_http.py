@@ -136,3 +136,25 @@ class CampaignHTTPTests(unittest.TestCase):
         self.client.headers['Authorization']='Bearer '+observe
         self.assertEqual(self.call('look').status_code,200)
         self.assertEqual(self.call('travel',{'revision':0,'destination':'gate'}).status_code,403)
+
+    def test_wizard_join_and_spell_slot_replay_are_persistent(self):
+        joined=self.call('join',{'class_key':'wizard'},'wizard-join')
+        self.assertEqual(joined.status_code,200,joined.text)
+        self.assertEqual(self.state()['build']['class'],'Wizard')
+        args={'revision':0,'spell':'mage_armor','target':'hero','slot_level':1}
+        first=self.call('cast',args,'wizard-armor')
+        replay=self.call('cast',args,'wizard-armor')
+        self.assertEqual(first.status_code,200,first.text);self.assertEqual(replay.status_code,200,replay.text)
+        self.assertFalse(first.json()['replayed']);self.assertTrue(replay.json()['replayed'])
+        self.assertEqual(self.state()['spell_slots']['1'],1)
+        stale=self.call('cast',args,'wizard-armor-new-id')
+        self.assertGreaterEqual(stale.status_code,400)
+        self.assertEqual(self.state()['spell_slots']['1'],1)
+
+    def test_join_rejects_unknown_class_before_state_creation(self):
+        result=self.call('join',{'class_key':'bard'},'bad-class')
+        self.assertEqual(result.status_code,422)
+        with self.app.state.runtime._conn(readonly=True) as c:
+            count=c.execute("SELECT COUNT(*) FROM world_state WHERE universe=? AND scope=?", (UNIVERSE,'campaign:'+self.role)).fetchone()[0]
+        self.assertEqual(count,0)
+
