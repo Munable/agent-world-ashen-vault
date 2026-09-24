@@ -26,7 +26,7 @@ def cues_for(ctx,events):
     cues=[]
     for index,event in enumerate(events):
         cue=PresentationCue(cue_id=f'{action}:{index}',subject_id='hero',channel='action',phase='finish',name='campaign.'+event['kind'],
-             data={'schema':'ashen-campaign/1','action_id':action,'step':index,'caused_by':f'{action}:{index-1}' if index else None,
+             data={'schema':'ashen-campaign/2','action_id':action,'step':index,'caused_by':f'{action}:{index-1}' if index else None,
                    'scene_id':'adventure:'+ctx.actor_role_id,'event':event['data'],'frame':event['frame']})
         cues.append(cue)
     return cues
