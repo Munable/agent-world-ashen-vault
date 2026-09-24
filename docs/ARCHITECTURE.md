@@ -51,7 +51,7 @@ HP、AC、伤害、先攻、反应窗口完全属于世界包。通用内核未�
 本世界遇到真实通用缺口可以改进底座，但 HP、先攻、职业、休息与任务奖励语义不进入核心。完整设计与实施顺序分别以 GAME_DESIGN 和 ROADMAP 为准，不在这里再维护一份并行玩法规格。
 
 
-## G1 单人冒险实施补充（0.2.0a1）
+## G1 单人冒险实施补充（0.2.0a1–0.2.0a2）
 
 G1使用独立WorldDefinition/universe `ashen-vault-ember`，不把M1两席位数据强行迁移成玩家存档。每个认证role_id挂接自己的campaign状态。世界层新增campaign_content（作者内容/构筑）、campaign（纯规则推进/脚本NPC）、campaign_world（现有SDK适配）和独立前端。
 

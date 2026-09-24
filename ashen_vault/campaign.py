@@ -87,18 +87,23 @@ def available(s):
         if h['position'][0]==0:add('离开遭遇','escape',turn_id=tid)
         add('结束回合','end_turn',turn_id=tid);return actions
     for room in ROOMS[s['room']]['neighbors']:
-        if room=='shrine' and not s['flags'].get('guard_access'):continue
+        if room=='shrine' and (not s['flags'].get('guard_access') or 'frightened' in s['hero']['conditions']):continue
         add('前往'+(ROOMS[room]['name'] if room in s['visited'] else '未探索通道'),'travel',destination=room)
     room=s['room'];flags=s['flags']
     if room=='gate' and not flags.get('inscription'):add('阅读通行誓约','interact',target='inscription')
-    if room=='cache' and 'cache' not in s['attempts'] and 'cache' not in s['rewards']:add('撬开补给箱','interact',target='cache')
+    if room=='cache' and 'cache' not in s['attempts'] and 'cache' not in s['rewards']:
+        add('强行撬开补给箱（Athletics）','interact',target='cache')
+        if s['build'].get('tool')=='carpenters_tools' and 'carpenters_tools' in s['build'].get('equipment',[]):add('用木匠工具调整箱盖','interact',target='cache_tools')
     if room=='guard' and flags.get('inscription') and not flags.get('guard_access'):
         if s['gold']>=20:add('支付 20 金币','interact',target='pay_guard')
-        if 'parley' not in s['attempts']:add('交涉争取通行','interact',target='parley')
+        if 'parley' not in s['attempts']:add('交涉争取通行（Intimidation）','interact',target='parley')
+        if s['hero'].get('naturally_stealthy') and 'stealth_passage' not in s['attempts']:add('借高大驮兽遮蔽潜行（Naturally Stealthy）','interact',target='stealth_passage')
         add('挑战守卫','interact',target='challenge')
     if room=='shrine':
-        if flags.get('guard_access') and not flags.get('ember') and not flags.get('delivered'):add('取回火种','interact',target='take_ember')
-        if flags.get('delivered') and s['level']==2:add('开始守印考验','interact',target='trial')
+        if flags.get('guard_access') and not flags.get('dread_cleared') and 'frightened' not in s['hero']['conditions']:add('直面余烬低语（Brave 优势豁免）','interact',target='dread')
+        if flags.get('dread_cleared') and flags.get('guard_access') and not flags.get('ember') and not flags.get('delivered'):add('取回火种','interact',target='take_ember')
+        if flags.get('dread_cleared') and flags.get('delivered') and s['level']==2:add('开始守印考验','interact',target='trial')
+    if 'frightened' in s['hero']['conditions']:add('稳定心神（Brave 优势豁免）','interact',target='dread_recover')
     if room=='camp':
         if flags.get('ember') and not flags.get('delivered'):add('交还火种','interact',target='deliver')
         for kind,label in (('short','短休（1 小时）'),('long','长休（8 小时）')):
@@ -192,9 +197,13 @@ def start_battle(s,events,draw):
 def checked_outcome(s,events,kind,success,draw):
     emit(events,s,'check_result',check=kind,success=success)
     if success:
-        if kind=='cache':reward(s,events,'cache','athletics_check')
-        else:s['flags']['guard_access']=True;reward(s,events,'guard_access','authored-parley-reward')
-    elif kind=='parley':start_battle(s,events,draw)
+        if kind in ('cache','cache_tools'):
+            reward(s,events,'cache','carpenters_tools_check' if kind=='cache_tools' else 'athletics_check')
+        else:
+            s['flags']['guard_access']=True
+            reward(s,events,'guard_access','authored-naturally-stealthy-hide' if kind=='stealth_passage' else 'authored-parley-reward')
+            if kind=='stealth_passage':emit(events,s,'objective',objective='guard_access',outcome='hidden_passage',trait='naturally_stealthy')
+    elif kind in ('parley','stealth_passage'):start_battle(s,events,draw)
 
 
 def apply(state,command,args,draw):
@@ -248,41 +257,76 @@ def apply(state,command,args,draw):
         if command=='travel':
             dest=args['destination'];require(dest in ROOMS[room]['neighbors'],'NotAdjacentRegion')
             require(dest!='shrine' or flags.get('guard_access'),'GuardBlocksPassage')
+            require(dest!='shrine' or 'frightened' not in s['hero']['conditions'],'FrightenedCannotApproachSource')
             s['room']=dest;s['seconds']+=600
             if dest not in s['visited']:s['visited'].append(dest)
             emit(events,s,'travel',origin='player',start=ROOMS[room]['position'],end=ROOMS[dest]['position'],room=dest)
         elif command=='interact':
             target=args['target']
             if target=='inscription':
-                require(room=='gate' and not flags.get('inscription'),'AlreadyReadOrWrongPlace');flags['inscription']=True
-                reward(s,events,'inscription','authored-investigation-reward')
-            elif target in ('pay_guard','parley','challenge'):
+                require(room=='gate' and not flags.get('inscription'),'AlreadyReadOrWrongPlace')
+                require('dwarvish' in s['build'].get('languages',[]),'DwarvishRequiredToReadInscription')
+                flags['inscription']=True
+                emit(events,s,'check_result',check='language:dwarvish',success=True,source='build_language')
+                reward(s,events,'inscription','authored-dwarvish-inscription')
+            elif target in ('pay_guard','parley','stealth_passage','challenge'):
                 require(room=='guard' and not flags.get('guard_access'),'GuardAlreadyResolvedOrWrongPlace')
                 require(flags.get('inscription'),'ReadTheInscriptionFirst')
                 if target=='pay_guard':
                     require(s['gold']>=20,'InsufficientGold');s['gold']-=20;flags['guard_access']=True
                     reward(s,events,'guard_access','authored-paid-passage-reward')
-                elif target=='challenge':start_battle(s,events,draw)
+                elif target=='challenge':
+                    start_battle(s,events,draw)
+                elif target=='stealth_passage':
+                    require(s['hero'].get('naturally_stealthy'),'NaturallyStealthyRequired')
+                    require('stealth_passage' not in s['attempts'],'NoUnchangedCheckRetry')
+                    s['attempts'].append('stealth_passage')
+                    test=d20(draw,3,dc=15,reroll_one=args.get('use_luck',True));s['seconds']+=60
+                    emit(events,s,'check',check='stealth_passage',skill='stealth',trait='naturally_stealthy',
+                         obscured_by='larger_pack_beast',test=test)
+                    checked_outcome(s,events,'stealth_passage',test['success'],draw)
                 else:
                     require('parley' not in s['attempts'],'NoUnchangedCheckRetry');s['attempts'].append('parley')
                     test=d20(draw,1,dc=13,reroll_one=args.get('use_luck',True));s['seconds']+=60
                     if not test['success'] and s['level']==2 and s['second_wind']>0:s['pending_check']={'kind':'parley','test':test,'dc':13}
-                    emit(events,s,'check',check='parley',test=test)
+                    emit(events,s,'check',check='parley',skill='intimidation',test=test)
                     if not s['pending_check']:checked_outcome(s,events,'parley',test['success'],draw)
-            elif target=='cache':
-                require(room=='cache' and 'cache' not in s['attempts'],'NoUnchangedCheckRetryOrWrongPlace');s['attempts'].append('cache')
-                test=d20(draw,5,dc=15,reroll_one=args.get('use_luck',True));s['seconds']+=600
-                if not test['success'] and s['level']==2 and s['second_wind']>0:s['pending_check']={'kind':'cache','test':test,'dc':15}
-                emit(events,s,'check',check='cache',test=test)
-                if not s['pending_check']:checked_outcome(s,events,'cache',test['success'],draw)
+            elif target in ('cache','cache_tools'):
+                require(room=='cache' and 'cache' not in s['attempts'],'NoUnchangedCheckRetryOrWrongPlace')
+                if target=='cache_tools':
+                    require(s['build'].get('tool')=='carpenters_tools' and 'carpenters_tools' in s['build'].get('equipment',[]),'CarpentersToolsRequired')
+                    modifier,dc,check_name,ability=3,12,'carpenters_tools','dex'
+                else:
+                    modifier,dc,check_name,ability=5,15,'athletics','str'
+                s['attempts'].append('cache')
+                test=d20(draw,modifier,dc=dc,reroll_one=args.get('use_luck',True));s['seconds']+=600
+                if not test['success'] and s['level']==2 and s['second_wind']>0:s['pending_check']={'kind':target,'test':test,'dc':dc}
+                emit(events,s,'check',check=check_name,ability=ability,proficiency='tool' if target=='cache_tools' else 'skill',test=test)
+                if not s['pending_check']:checked_outcome(s,events,target,test['success'],draw)
+            elif target in ('dread','dread_recover'):
+                recovering=target=='dread_recover'
+                if recovering:
+                    require('frightened' in s['hero']['conditions'],'NoFrightenedCondition')
+                else:
+                    require(room=='shrine' and flags.get('guard_access') and not flags.get('dread_cleared') and 'frightened' not in s['hero']['conditions'],'DreadUnavailable')
+                brave=bool(s['hero'].get('brave'))
+                test=d20(draw,1,dc=11,advantage=brave,reroll_one=args.get('use_luck',True));s['seconds']+=60
+                emit(events,s,'check',check='dread_save',save='wisdom',trait='brave' if brave else None,test=test)
+                if test['success']:
+                    s['hero']['conditions']=[condition for condition in s['hero']['conditions'] if condition!='frightened']
+                    flags['dread_cleared']=True
+                else:
+                    s['hero']['conditions']=sorted(set(s['hero']['conditions'])|{'frightened'})
+                emit(events,s,'check_result',check='dread_save',success=test['success'],condition='frightened',
+                     outcome='ended' if recovering and test['success'] else 'avoided' if test['success'] else 'applied')
             elif target=='take_ember':
-                require(room=='shrine' and flags.get('guard_access') and not flags.get('ember') and not flags.get('delivered'),'EmberUnavailable')
+                require(room=='shrine' and flags.get('guard_access') and flags.get('dread_cleared') and not flags.get('ember') and not flags.get('delivered'),'EmberUnavailable')
                 flags['ember']=True;emit(events,s,'item',item='ember',outcome='picked_up')
             elif target=='deliver':
                 require(room=='camp' and flags.get('ember') and not flags.get('delivered'),'DeliveryUnavailable')
                 flags['ember']=False;flags['delivered']=True;reward(s,events,'ember_delivery','authored-return-objective')
             elif target=='trial':
-                require(room=='shrine' and flags.get('delivered') and s['level']==2,'CompleteGrowthBeforeTrial');start_battle(s,events,draw)
+                require(room=='shrine' and flags.get('delivered') and flags.get('dread_cleared') and s['level']==2,'CompleteGrowthBeforeTrial');start_battle(s,events,draw)
             else:raise RulesError('UnknownInteraction')
         elif command=='resolve_check':
             pending=s['pending_check'];require(pending is not None,'NoPendingCheck');require(args['choice'] in ('tactical','accept'),'UnknownChoice')

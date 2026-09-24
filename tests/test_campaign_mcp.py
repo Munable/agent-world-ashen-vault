@@ -16,15 +16,24 @@ class CampaignMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn('adventure.level_up',{t.name for t in tools.tools})
                         joined=await session.call_tool('adventure.join',arguments={'operation_id':'mcp-join','arguments':{}})
                         self.assertFalse(joined.is_error,joined.structured_content)
-                        revision=0
-                        for index,(name,args) in enumerate([
-                            ('travel',{'destination':'gate'}),('interact',{'target':'inscription'}),('travel',{'destination':'fork'}),('travel',{'destination':'guard'}),
-                            ('interact',{'target':'pay_guard'}),('travel',{'destination':'shrine'}),('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),
-                            ('travel',{'destination':'fork'}),('travel',{'destination':'gate'}),('travel',{'destination':'camp'}),('interact',{'target':'deliver'}),('level_up',{'style':'defense'})]):
-                            call={'operation_id':'mcp-adventure-'+str(index),'arguments':{'revision':revision,**args}}
-                            result=await session.call_tool('adventure.'+name,arguments=call)
-                            self.assertFalse(result.is_error,result.structured_content)
-                            revision=result.structured_content['result']['scene']['meta']['revision']
+                        revision=0;serial=0;call=None
+                        async def act(name,**args):
+                            nonlocal revision,serial,call
+                            call={'operation_id':'mcp-adventure-'+str(serial),'arguments':{'revision':revision,**args}};serial+=1
+                            value=await session.call_tool('adventure.'+name,arguments=call)
+                            self.assertFalse(value.is_error,value.structured_content)
+                            revision=value.structured_content['result']['scene']['meta']['revision']
+                            return value
+                        for name,args in [('travel',{'destination':'gate'}),('interact',{'target':'inscription'}),('travel',{'destination':'fork'}),('travel',{'destination':'guard'}),
+                                          ('interact',{'target':'pay_guard'}),('travel',{'destination':'shrine'})]:await act(name,**args)
+                        result=await act('interact',target='dread')
+                        for _ in range(8):
+                            actions=result.structured_content['result']['scene']['meta']['actions']
+                            if any(a['arguments'].get('target')=='take_ember' for a in actions):break
+                            result=await act('interact',target='dread_recover')
+                        else:self.fail('Brave recovery did not clear authored dread within bounded MCP test')
+                        for name,args in [('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),('travel',{'destination':'fork'}),
+                                          ('travel',{'destination':'gate'}),('travel',{'destination':'camp'}),('interact',{'target':'deliver'}),('level_up',{'style':'defense'})]:result=await act(name,**args)
                         self.assertEqual(result.structured_content['result']['scene']['meta']['level'],2)
                         replay=await session.call_tool('adventure.level_up',arguments=call)
                         self.assertTrue(replay.structured_content['replayed'])

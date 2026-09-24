@@ -17,7 +17,7 @@ def at_delivered():
     state=new_campaign('player')
     for name,args in [('travel',{'destination':'gate'}),('interact',{'target':'inscription'}),('travel',{'destination':'fork'}),
                       ('travel',{'destination':'guard'}),('interact',{'target':'pay_guard'}),('travel',{'destination':'shrine'}),
-                      ('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),('travel',{'destination':'fork'}),
+                      ('interact',{'target':'dread'}),('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),('travel',{'destination':'fork'}),
                       ('travel',{'destination':'gate'}),('travel',{'destination':'camp'}),('interact',{'target':'deliver'})]:
         state,_=command(state,name,**args)
     return state
@@ -240,6 +240,56 @@ class CampaignTests(unittest.TestCase):
         s=self.battle_state();tid=s['battle']['turn_id']
         s,_=command(s,'attack',dice(1),turn_id=tid,target='enemy',use_luck=False)
         self.assertTrue(s['hero']['lucky']);self.assertTrue(s['battle']['actors']['hero']['lucky'])
+
+    def test_dwarvish_language_is_a_real_inscription_gate(self):
+        s=new_campaign('player');s,_=command(s,'travel',destination='gate')
+        blocked=deepcopy(s);blocked['build']['languages'].remove('dwarvish')
+        with self.assertRaisesRegex(RulesError,'DwarvishRequired'):command(blocked,'interact',target='inscription')
+        s,events=command(s,'interact',target='inscription')
+        self.assertEqual(events[0]['data']['check'],'language:dwarvish')
+        self.assertEqual(s['rewards']['inscription']['resolution'],'authored-dwarvish-inscription')
+
+    def test_naturally_stealthy_opens_a_real_hide_route(self):
+        s=new_campaign('player')
+        for room in ('gate','fork','guard'):
+            s,_=command(s,'travel',destination=room)
+            if room=='gate':s,_=command(s,'interact',target='inscription')
+        stealth=[a for a in available(s) if a['arguments'].get('target')=='stealth_passage']
+        self.assertEqual(len(stealth),1)
+        s,events=command(s,'interact',dice(12),target='stealth_passage',use_luck=False)
+        check=next(e for e in events if e['kind']=='check')
+        self.assertEqual((check['data']['skill'],check['data']['trait'],check['data']['test']['total']),('stealth','naturally_stealthy',15))
+        self.assertTrue(s['flags']['guard_access'])
+        self.assertEqual(s['rewards']['guard_access']['resolution'],'authored-naturally-stealthy-hide')
+
+    def test_carpenters_tools_are_a_real_cache_option(self):
+        s=new_campaign('player')
+        for room in ('gate','fork','cache'):
+            s,_=command(s,'travel',destination=room)
+            if room=='gate':s,_=command(s,'interact',target='inscription')
+        self.assertTrue(any(a['arguments'].get('target')=='cache_tools' for a in available(s)))
+        s,events=command(s,'interact',dice(9),target='cache_tools',use_luck=False)
+        check=next(e for e in events if e['kind']=='check')
+        self.assertEqual((check['data']['check'],check['data']['test']['total']),('carpenters_tools',12))
+        self.assertEqual(s['rewards']['cache']['resolution'],'carpenters_tools_check')
+        self.assertFalse(any(a['arguments'].get('target') in ('cache','cache_tools') for a in available(s)))
+
+    def test_brave_fear_save_and_recovery_are_enforced(self):
+        s=new_campaign('player');s['room']='shrine';s['visited'].append('shrine');s['flags']['guard_access']=True
+        s,events=command(s,'interact',dice(2,3),target='dread',use_luck=False)
+        check=next(e for e in events if e['kind']=='check')
+        self.assertEqual((check['data']['test']['mode'],check['data']['trait']),('advantage','brave'))
+        self.assertIn('frightened',s['hero']['conditions'])
+        s['room']='guard'
+        self.assertFalse(any(a['arguments'].get('destination')=='shrine' for a in available(s)))
+        with self.assertRaisesRegex(RulesError,'FrightenedCannotApproachSource'):command(s,'travel',destination='shrine')
+        s,events=command(s,'interact',dice(4,12),target='dread_recover',use_luck=False)
+        self.assertNotIn('frightened',s['hero']['conditions']);self.assertTrue(s['flags']['dread_cleared'])
+        s,_=command(s,'travel',destination='shrine');self.assertEqual(s['room'],'shrine')
+
+    def test_ember_cannot_bypass_dread_resolution(self):
+        s=new_campaign('player');s['room']='shrine';s['visited'].append('shrine');s['flags']['guard_access']=True
+        with self.assertRaisesRegex(RulesError,'EmberUnavailable'):command(s,'interact',target='take_ember')
 
     def test_potion_purchase_changes_a_real_early_route_choice(self):
         s,_=command(new_campaign('player'),'buy_potion')

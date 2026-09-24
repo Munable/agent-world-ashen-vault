@@ -38,7 +38,7 @@ function render(scene,fx,skinId){
   const h=scene.entities.hero;
   $('#stats').textContent=`战士 ${m.level} 级 · HP ${h.hp}/${h.max_hp} · AC ${h.ac}\n经验 ${m.xp}/300 · 金币 ${m.gold} · 药水 ${m.potions}\n第二风息 ${m.second_wind}/2 · 动作如潮 ${m.action_surge} · 生命骰 ${m.hit_dice}\n${m.battle?'第 '+m.battle.round+' 轮，当前 '+m.battle.active+'，移动 '+h.movement+' 英尺':'世界内已过 '+Math.floor(m.minutes)+' 分钟'}`;
   $('#stats').style.whiteSpace='pre-line';$('#xp').value=Math.min(300,m.xp);$('#quest').textContent=m.quest;$('#room-text').textContent=m.text;
-  $('#details').textContent=`${m.build.species} / ${m.build.background}\n${m.build.ability_source}\n专长 ${m.build.origin_feat} · 风格 ${m.style}\n当前武器 ${m.weapon} · 1d${h.damage_die}+${h.damage_bonus} · Sap\n本切片仅提供三种已掌握的 Sap 近战武器；营地准备、持盾使用。未实现的远程、施法、隐藏及其它动作不会伪造结果。\n`+JSON.stringify(m.build.skills);
+  $('#details').textContent=`${m.build.species} / ${m.build.background}\n${m.build.ability_source}\n专长 ${m.build.origin_feat} · 风格 ${m.style}\n语言 ${m.build.languages.join(' / ')} · 工具 ${m.build.tool}\n当前武器 ${m.weapon} · 1d${h.damage_die}+${h.damage_bonus} · Sap\n本切片在特定场景兑现 Brave、Naturally Stealthy、木匠工具与已选技能；这不是完整 Hide/Search/Help/Ready 动作集。远程和施法仍未开放。\n`+JSON.stringify(m.build.skills);
   $('#ending').hidden=!m.ending;$('#ending').textContent=m.ending||'';
  } else {$('#stats').textContent='原身份已验证；开始冒险不会创建第二个身份。';$('#quest').textContent='准备角色与委托';$('#room-text').textContent='';}
  $('#caption').textContent=fx?labels[fx.kind]||fx.kind:m.battle?.pending?'等待玩家反应，不会自动放弃。':m.pending_check?'等待检定决定，结果尚未最终结算。':m.joined?'服务器事实已同步。':'首次初始化角色挂接数据。';
@@ -63,6 +63,11 @@ function addLogs(events){
    const r=d.result,a=r?.attack_result||(r?.attack?r:null);label=(d.origin==='scripted_npc'?'脚本 NPC':'玩家行动')+' · '+d.command;
    if(a)label+=` · d20 ${a.attack.dice.join('/')} +${a.attack.modifier} = ${a.attack.total} · ${a.hit?'命中，伤害 '+a.damage:'未命中'}`;
   }
+  if(e.cue.name==='campaign.check'){
+   const t=d.test,mode=t?.mode==='advantage'?'优势 · ':t?.mode==='disadvantage'?'劣势 · ':'';
+   label=`${d.check} · ${mode}d20 ${t.dice.join('/')} ${t.modifier>=0?'+':''}${t.modifier} = ${t.total}`;
+  }
+  if(e.cue.name==='campaign.check_result')label=`${d.check} · ${d.success?'成功':'失败'}`;
   if(e.cue.name==='campaign.item')label=d.outcome==='purchased'?'购买药水 · -50 金币':'取回火种';
   if(e.cue.name==='campaign.reward')label+=' · '+[['xp','XP'],['gold','金币'],['potions','药水']].filter(([k])=>d.after[k]>d.before[k]).map(([k,unit])=>'+'+(d.after[k]-d.before[k])+' '+unit).join(' / ');
   li.textContent=label;$('#log').append(li);

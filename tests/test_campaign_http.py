@@ -34,8 +34,14 @@ class CampaignHTTPTests(unittest.TestCase):
     def deliver(self):
         self.join()
         for name,args in [('travel',{'destination':'gate'}),('interact',{'target':'inscription'}),('travel',{'destination':'fork'}),('travel',{'destination':'guard'}),
-                          ('interact',{'target':'pay_guard'}),('travel',{'destination':'shrine'}),('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),
-                          ('travel',{'destination':'fork'}),('travel',{'destination':'gate'}),('travel',{'destination':'camp'}),('interact',{'target':'deliver'})]:self.act(name,**args)
+                          ('interact',{'target':'pay_guard'}),('travel',{'destination':'shrine'})]:self.act(name,**args)
+        self.act('interact',target='dread')
+        for _ in range(8):
+            if self.state()['flags'].get('dread_cleared'):break
+            self.act('interact',target='dread_recover')
+        else:self.fail('Brave recovery did not clear authored dread within bounded HTTP test')
+        for name,args in [('interact',{'target':'take_ember'}),('travel',{'destination':'guard'}),('travel',{'destination':'fork'}),
+                          ('travel',{'destination':'gate'}),('travel',{'destination':'camp'}),('interact',{'target':'deliver'})]:self.act(name,**args)
 
     def counts(self):
         with self.app.state.runtime._conn(readonly=True) as c:return tuple(c.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('roles','identity_tokens','operations','events'))
