@@ -168,3 +168,13 @@ class EngineTests(unittest.TestCase):
         b,_=apply(persisted,'warden','begin',{},dice(5,18))
         self.assertEqual(a['initiative'],b['initiative']);self.assertEqual(a['order'],b['order'])
 
+    def test_team_victory_does_not_end_when_one_ally_remains(self):
+        state=battle()
+        ally=deepcopy(state['actors']['warden']);ally.update(id='ally',team='warden',position=[2,3],hp=5)
+        state['actors']['ally']=ally
+        state['actors']['sentinel']['position']=[4,2]
+        new,_=act(state,'attack',(20,6,6),target='sentinel')
+        self.assertEqual(new['phase'],'complete')
+        self.assertEqual(new['winner'],'warden')
+        self.assertEqual(new['actors']['ally']['hp'],5)
+
