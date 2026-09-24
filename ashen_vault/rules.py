@@ -15,12 +15,18 @@ def roll(draw: Draw, sides: int, count: int = 1) -> list[int]:
 
 
 def d20(draw: Draw, modifier: int, *, advantage: bool = False, disadvantage: bool = False,
-        dc: int | None = None, attack: bool = False) -> dict:
+        dc: int | None = None, attack: bool = False, reroll_one: bool = False) -> dict:
     """SRD pp. 6-8: opposing advantage sources cancel, regardless of their counts."""
     mode = 'normal' if bool(advantage) == bool(disadvantage) else 'advantage' if advantage else 'disadvantage'
     dice = roll(draw, 20, 1 if mode == 'normal' else 2)
+    original = list(dice)
     natural = min(dice) if mode == 'disadvantage' else max(dice)
+    if reroll_one and natural == 1:
+        dice[dice.index(1)] = roll(draw, 20)[0]
+        natural = min(dice) if mode == 'disadvantage' else max(dice)
     result = {'dice': dice, 'mode': mode, 'natural': natural, 'modifier': modifier, 'total': natural + modifier}
+    if original != dice:
+        result['initial_dice'] = original
     if dc is not None:
         result['success'] = natural == 20 or (natural != 1 and natural + modifier >= dc) if attack else natural + modifier >= dc
     result['critical'] = bool(attack and natural == 20)
@@ -118,7 +124,7 @@ def death_save(actor: dict, draw: Draw) -> dict:
     return {'natural': natural, 'hp': actor['hp'], 'stable': actor.get('stable', False), 'dead': actor.get('dead', False)}
 
 
-def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = False) -> dict:
+def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = False, use_luck: bool = True) -> dict:
     """Fixed equipped weapon, visible targets, no cover: closed M1 scene assumptions."""
     if incapacitated(attacker) or target.get('dead'):
         raise ValueError('invalid combatant')
@@ -126,8 +132,9 @@ def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = F
     if not close:
         raise ValueError('outside 5-foot reach')
     advantage = 'prone' in target['conditions'] or unconscious(target)
-    disadvantage = 'prone' in attacker['conditions'] or (target.get('dodge', False) and not incapacitated(target) and target['speed'] > 0)
-    test = d20(draw, attacker['attack_bonus'], advantage=advantage, disadvantage=disadvantage, dc=target['ac'], attack=True)
+    disadvantage = 'prone' in attacker['conditions'] or bool(attacker.get('sapped_by')) or (target.get('dodge', False) and not incapacitated(target) and target['speed'] > 0)
+    test = d20(draw, attacker['attack_bonus'], advantage=advantage, disadvantage=disadvantage, dc=target['ac'], attack=True, reroll_one=attacker.get('lucky', False) and use_luck)
+    attacker.pop('sapped_by', None)
     critical = test['success'] and (test['critical'] or unconscious(target))
     result = {'attack': test, 'hit': test['success'], 'critical': bool(critical), 'damage': 0, 'damage_dice': []}
     if test['success']:
@@ -138,4 +145,7 @@ def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = F
                                vulnerable=kind in target.get('vulnerabilities', []), immune=kind in target.get('immunities', []))
         result.update(damage_dice=dice, damage_bonus=attacker['damage_bonus'], damage_type=kind, raw_damage=raw, damage=damage)
         result['effect'] = lose_hp(target, damage, critical=bool(critical), knockout=knockout)
+        if attacker.get('mastery') == 'sap' and not target.get('dead'):
+            target['sapped_by'] = attacker['id']
+            result['mastery'] = 'sap'
     return result

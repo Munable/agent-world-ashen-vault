@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-world-ashen-vault"
-version = "0.1.0a1"
-description = "SRD 5.2.1 bounded rules laboratory on Agent World; not full 5E coverage."
+version = "0.2.0a1"
+description = "Bounded SRD 5.2.1 solo adventure preview and melee regression world on Agent World."
 requires-python = ">=3.11"
 dependencies = ["agent-world @ git+https://github.com/Munable/agent-world.git@422fc56fd63d383fb4dd262981810d88e5db0c73"]
 

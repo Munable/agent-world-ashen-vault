@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "schema": "ashen-campaign/1",
+  "bindings": {
+    "campaign.joined": {
+      "type": "joined",
+      "duration_ms": 0
+    },
+    "campaign.travel": {
+      "type": "travel",
+      "duration_ms": 600
+    },
+    "campaign.combat": {
+      "type": "combat",
+      "duration_ms": 550
+    },
+    "campaign.reward": {
+      "type": "reward",
+      "duration_ms": 450
+    },
+    "campaign.encounter": {
+      "type": "encounter",
+      "duration_ms": 300
+    },
+    "campaign.ending": {
+      "type": "ending",
+      "duration_ms": 400
+    },
+    "campaign.objective": {
+      "type": "objective",
+      "duration_ms": 250
+    },
+    "campaign.check_result": {
+      "type": "check_result",
+      "duration_ms": 250
+    },
+    "campaign.check": {
+      "type": "check",
+      "duration_ms": 300
+    },
+    "campaign.tactical_mind": {
+      "type": "tactical_mind",
+      "duration_ms": 350
+    },
+    "campaign.healing": {
+      "type": "healing",
+      "duration_ms": 450
+    },
+    "campaign.ability": {
+      "type": "ability",
+      "duration_ms": 300
+    },
+    "campaign.level_up": {
+      "type": "level_up",
+      "duration_ms": 700
+    },
+    "campaign.equipment": {
+      "type": "equipment",
+      "duration_ms": 200
+    },
+    "campaign.rest": {
+      "type": "rest",
+      "duration_ms": 350
+    },
+    "campaign.retreat": {
+      "type": "retreat",
+      "duration_ms": 500
+    },
+    "campaign.item": {
+      "type": "item",
+      "duration_ms": 400
+    },
+    "campaign.state_changed": {
+      "type": "state_changed",
+      "duration_ms": 0
+    }
+  },
+  "skins": {
+    "amber": {
+      "name": "琥珀",
+      "floor": "#263538",
+      "wall": "#5d6660",
+      "hero": "#f4cf8b",
+      "enemy": "#bb7970",
+      "accent": "#d8b174",
+      "shape": "circle"
+    },
+    "moon": {
+      "name": "月白",
+      "floor": "#283547",
+      "wall": "#526783",
+      "hero": "#a8d8e8",
+      "enemy": "#cb9cdb",
+      "accent": "#9cd3de",
+      "shape": "diamond"
+    }
+  }
+}

@@ -1,2 +1,2 @@
-"""Ashen Vault: SRD 5.2.1 bounded rules implementation, M1 pre-alpha."""
-__version__ = "0.1.0a1"
+"""Ashen Vault: SRD 5.2.1 bounded melee rules and solo adventure preview."""
+__version__ = "0.2.0a1"

@@ -1,0 +1,99 @@
+{
+  "version": "0.2.0a1",
+  "base_commit": "63baacfaddcc1bf1568b23704d5325d823278579",
+  "milestone": "G1 playable solo preview, full acceptance remains partial",
+  "python_tests": 133,
+  "browser_suites": [
+    "M1 public melee observer",
+    "G1 private playable campaign"
+  ],
+  "javascript_tests": 12,
+  "model_calls": 0,
+  "freeapi_calls": 0,
+  "kernel_modified": false,
+  "local_native_runtime_issue": "Unresolved intermittent native interpreter aborts observed on same Windows host with Python 3.13.5 and 3.14.2; independent CI required.",
+  "simulation_successful_sample": {
+    "scope": "Seeded deterministic scripted policy, NOT human or model win rates; no production RNG seed endpoint.",
+    "runs": 900,
+    "invariants": "passed",
+    "routes": {
+      "paid": {
+        "runs": 300,
+        "completed": 299,
+        "captured": 1,
+        "mean_steps": 27.88,
+        "max_steps": 47,
+        "reached_level_2": 300,
+        "used_action_surge": 300
+      },
+      "fight": {
+        "runs": 300,
+        "completed": 294,
+        "captured": 6,
+        "mean_steps": 33.66,
+        "max_steps": 54,
+        "reached_level_2": 296,
+        "used_action_surge": 296
+      },
+      "parley": {
+        "runs": 300,
+        "completed": 297,
+        "captured": 3,
+        "mean_steps": 30.97,
+        "max_steps": 55,
+        "reached_level_2": 298,
+        "used_action_surge": 298
+      }
+    }
+  },
+  "action_exploration": {
+    "scope": "Seeded exploration of offered actions and stale-intent rejection, not a player success-rate test.",
+    "seeds": 60,
+    "maximum_steps_per_seed": 100,
+    "accepted_actions": 4949,
+    "stale_intents_rejected": 4949,
+    "terminal_paths": 43,
+    "action_kinds": [
+      "action_surge",
+      "approach",
+      "attack",
+      "buy_potion",
+      "dash",
+      "disengage",
+      "dodge",
+      "end_turn",
+      "equip",
+      "escape",
+      "interact",
+      "level_up",
+      "potion",
+      "react",
+      "rest",
+      "retire",
+      "second_wind",
+      "spend_hit_die",
+      "travel",
+      "withdraw"
+    ],
+    "phases": [
+      "battle",
+      "cache",
+      "camp",
+      "fork",
+      "gate",
+      "guard",
+      "shrine"
+    ],
+    "result": "passed"
+  },
+  "ci": "See workflow on this exact commit; not predeclared successful.",
+  "not_complete": [
+    "full G1 rules closure",
+    "three classes",
+    "co-op",
+    "all SRD",
+    "real-player balance",
+    "autonomous-model validation",
+    "production reliability"
+  ]
+}

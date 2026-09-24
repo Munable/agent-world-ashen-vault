@@ -14,7 +14,7 @@ from agent_world.world_sdk import install_world
 from .world import WORLD
 
 
-def create_app(db, origin='http://127.0.0.1:8850'):
+def create_app(db, origin='http://127.0.0.1:8850', *, campaign=False):
     if not isinstance(origin, str) or any(c.isspace() or ord(c) < 32 for c in origin) or '\\' in origin:
         raise ValueError('invalid origin')
     parsed = urlsplit(origin)
@@ -25,13 +25,26 @@ def create_app(db, origin='http://127.0.0.1:8850'):
     if parsed.scheme == 'http' and parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
         raise ValueError('non-loopback origins require HTTPS')
     origin = origin.rstrip('/')
-    installer = lambda runtime, universe: install_world(runtime, universe, WORLD)
-    mcp, _, runtime = create_mcp_app(db, 'ashen-vault', auth_required=True, installer=installer, host=parsed.hostname)
-    api = http_app(db, 'ashen-vault', auth_required=True, installer=installer)
+    world, universe = WORLD, 'ashen-vault'
+    if campaign:
+        from .campaign_world import WORLD as story_world, UNIVERSE
+        world, universe = story_world, UNIVERSE
+    installer = lambda runtime, universe: install_world(runtime, universe, world)
+    mcp, _, runtime = create_mcp_app(db, universe, auth_required=True, installer=installer, host=parsed.hostname)
+    api = http_app(db, universe, auth_required=True, installer=installer)
     web = Path(__file__).parent/'web'
 
     @api.get('/agent', response_class=PlainTextResponse)
     def guide():
+        if campaign:
+            return ('Ashen Vault G1 solo preview. Use the user-held token for ashen-vault-ember, never create a substitute identity.\n'
+                    f'GET {origin}/v1/whoami then {origin}/v1/bootstrap. Discover prefix=adventure. and inspect current schemas.\n'
+                    'POST /v1/functions/<tool>/invoke with operation_id and arguments for writes; omit operation_id for look.\n'
+                    'Read adventure.look. Join once; use offered actions and the current revision and turn_id. React only to your pending window.\n'
+                    'Missing credentials: stop. Unsupported actions: report the limit. NPCs are script-driven, not external Agents.\n'
+                    'Never supply rolls/damage/rewards or assume resumed success from merely reading this guide.\n'
+                    'Use SAME operation_id and args after an uncertain response. View /v1/receipts/<id> to verify.\n'
+                    'Do not disclose token or Authorization. Report verified progress and whether the turn stopped. No background-play claim.\n')
         return f"""Ashen Vault M1 / SRD 5.2.1 bounded melee rules laboratory.
 Not a complete D&D game: no PC classes, spells, ranged attacks, or arbitrary DM decisions yet.
 The identity token belongs to the user. Use their token, not a new identity or a guessed one.
@@ -55,11 +68,20 @@ Report only actual outcomes in the user's language; do not repeat token/Authoriz
     @api.get('/watch')
     @api.get('/')
     def watch():
-        return FileResponse(web/'index.html')
+        return FileResponse(web/('campaign.html' if campaign else 'index.html'))
 
     @api.get('/watch.js')
     def javascript():
         return FileResponse(web/'watch.js', media_type='text/javascript')
+
+    @api.get('/campaign.js')
+    def campaign_script():return FileResponse(web/'campaign.js',media_type='text/javascript')
+
+    @api.get('/campaign-player.js')
+    def campaign_player():return FileResponse(web/'campaign-player.mjs',media_type='text/javascript')
+
+    @api.get('/campaign-assets.json')
+    def campaign_assets():return FileResponse(web/'campaign-assets.json',media_type='application/json')
 
     class Dispatch:
         async def __call__(self, scope, receive, send):
@@ -81,9 +103,10 @@ def main():
     parser = argparse.ArgumentParser(description='Run the isolated Ashen Vault M1 laboratory.')
     parser.add_argument('--db', default='private/ashen-vault.sqlite3')
     parser.add_argument('--port', type=int, default=8850)
+    parser.add_argument('--campaign', action='store_true', help='Run the private G1 preview instead of the M1 laboratory')
     args = parser.parse_args()
     import uvicorn
-    uvicorn.run(create_app(args.db, f'http://127.0.0.1:{args.port}'), host='127.0.0.1', port=args.port, log_level='warning')
+    uvicorn.run(create_app(args.db, f'http://127.0.0.1:{args.port}',campaign=args.campaign), host='127.0.0.1', port=args.port, log_level='warning')
 
 
 if __name__ == '__main__':

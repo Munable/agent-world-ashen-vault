@@ -33,6 +33,12 @@ def clear_step(a: list[int], b: list[int]) -> bool:
 def _turn_start(state: dict) -> None:
     actor = state['actors'][active(state)]
     actor.update(action=True, reaction=True, dodge=False, disengage=False, movement=actor['speed'])
+    if 'bonus_action' in actor:
+        actor['bonus_action'] = True
+        actor['extra_actions'] = 0
+    for other in state['actors'].values():
+        if other.get('sapped_by') == actor['id']:
+            other.pop('sapped_by', None)
     state['turn_id'] += 1
 
 
@@ -57,7 +63,7 @@ def _validate_path(state: dict, actor: dict, path: list) -> None:
         require(adjacent(cursor, cell) and clear_step(cursor, cell), 'InvalidPath: blocked or non-adjacent step')
         for other in state['actors'].values():
             if other['id'] != actor['id'] and other['position'] == cell:
-                require(other['team'] == actor['team'] or incapacitated(other), 'OccupiedByEnemy')
+                require(other['team'] == actor['team'] or incapacitated(other) or (actor.get('nimble') and actor.get('size') == 'small' and other.get('size', 'medium') != 'small'), 'OccupiedByEnemy')
         cost += _cost(state, actor, cell)
         cursor = cell
     require(not any(other['id'] != actor['id'] and other['position'] == cursor for other in state['actors'].values()), 'OccupiedDestination')
@@ -74,7 +80,7 @@ def _advance_movement(state: dict, actor_id: str, path: list, waived: list[str] 
                         and other['reaction'] and not incapacitated(other)
                         and adjacent(other['position'], actor['position'])
                         and clear_step(other['position'], actor['position'])
-                        and not adjacent(other['position'], cell)):
+                        and max(abs(other['position'][i]-cell[i]) for i in (0,1)) > 1):
                     state['window_serial'] += 1
                     state['pending'] = {'window_id': f"oa-{state['turn_id']}-{state['window_serial']}",
                         'reactor': other_id, 'mover': actor_id, 'path': deepcopy(path[index:]),
@@ -97,7 +103,7 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
     if command == 'begin':
         require(state['phase'] == 'lobby', 'EncounterAlreadyStarted')
         require(set(state['owners']) == set(state['actors']), 'WaitingForParticipants')
-        state['initiative'] = {key: d20(draw, value['initiative_bonus']) for key, value in sorted(state['actors'].items())}
+        state['initiative'] = {key: d20(draw, value['initiative_bonus'], reroll_one=value.get('lucky', False)) for key, value in sorted(state['actors'].items())}
         # Both are NPC fixtures; the authored DM tie policy is fixed seat order.
         state['order'] = sorted(state['actors'], key=lambda key: (-state['initiative'][key]['total'], key))
         state.update(phase='active', round=1, index=0)
@@ -114,7 +120,7 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
         result = {'choice': args['choice'], 'reactor': actor_id, 'mover': pending['mover'], 'window_id': pending['window_id']}
         if args['choice'] == 'attack':
             actor['reaction'] = False
-            result['attack_result'] = melee_attack(actor, mover, draw, knockout=args.get('knockout', False))
+            result['attack_result'] = melee_attack(actor, mover, draw, knockout=args.get('knockout', False), use_luck=args.get('use_luck', True))
         _finish(state)
         if state['phase'] == 'complete' or incapacitated(mover):
             state['pending'] = None
@@ -156,7 +162,7 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
         target = state['actors'][target_id]
         require(not target['dead'], 'TargetDead')
         require(adjacent(actor['position'], target['position']) and clear_step(actor['position'], target['position']), 'OutOfReachOrBlocked')
-        result = {'actor': actor_id, 'target': target_id, **melee_attack(actor, target, draw, knockout=args.get('knockout', False))}
+        result = {'actor': actor_id, 'target': target_id, **melee_attack(actor, target, draw, knockout=args.get('knockout', False), use_luck=args.get('use_luck', True))}
         _finish(state)
     elif command == 'dash':
         actor['movement'] += actor['speed']
@@ -164,5 +170,8 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
     else:
         actor[command] = True
         result = {'effect': command}
-    actor['action'] = False
+    if actor.get('extra_actions', 0):
+        actor['extra_actions'] -= 1
+    else:
+        actor['action'] = False
     return state, result

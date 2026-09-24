@@ -1,49 +1,59 @@
 # 灰烬地城 · Ashen Vault
 
-**状态：0.1.0a1 / M1 近战规则验收场。不是完整 D&D 游戏，不宣称已实现整个 SRD。**
+**当前：0.2.0a1。保留 M1 规则验收场，新增 G1 单人冒险可玩预览。**
 
-这是 Agent World 的第二个独立世界包。基于 SRD 5.2.1 的有限规则实现，用于验证服务器裁决、回合、反应窗口、事务随机数、同身份续接和只读前端。没有修改通用内核，也没有复用灯溪镇的任务、地图或 NPC 逻辑。
+G1 已有一个角色从 1→2 级的实际链路：六区域探索、交涉/付费/战斗通行、补给购买与箱子、火种交还、经验与持久领奖、休息与资源、升级选择、用新能力完成后续考验。敌人由规则脚本驱动，玩家不需要第二个敌方账号。
 
-完整游戏目标已修订为三职业 1→3 级成长序章，并允许世界二次开发。下一步先做一个合法角色 1→2 级的六区域完整切片，把探索、战斗、奖励、回营与占位表现同时闭合；原固定 3 级构筑保留作成长终点和规则夹具。**这些仍是计划，目前代码只开放两个近战 NPC 配置。** 设计见 [GAME_DESIGN](docs/GAME_DESIGN.md)，执行顺序见 [ROADMAP](docs/ROADMAP.md)。
+前端用两套几何占位资源表现移动、攻击/未命中、血量、反应、奖励和升级；同一服务器事件轨迹可以替换资源包，规则不变。不是完整三职业游戏、完整 SRD 实现、公开运营版本或“任意素材零适配”产品。
 
-## 安装和运行
+## 运行单人冒险
 
 ```sh
 python -m venv .venv
-# 激活虚拟环境后：
+# 激活虚拟环境后安装：
 python -m pip install .
-python -m ashen_vault.provision --db private/ashen.sqlite3 --out private/warden-key.json --name Warden
-python -m ashen_vault.provision --db private/ashen.sqlite3 --out private/sentinel-key.json --name Sentinel
-python -m ashen_vault.server --db private/ashen.sqlite3 --port 8850
+python -m ashen_vault.provision --campaign --db private/ember.sqlite3 --out private/my-key.json --name Traveler
+python -m ashen_vault.server --campaign --db private/ember.sqlite3 --port 8851
 ```
 
-浏览器打开 `http://127.0.0.1:8850/watch`，只读查看场景与裁决。身份文件属于用户，必须自行私密保存。配置工具只输出完成提示，不打印身份令牌，不覆盖已有文件。当前没有网站注册、找回、完整角色创建器或自动控制 NPC 的后台模型。
+打开 `http://127.0.0.1:8851/watch`。把自己保存的身份文件中的 `identity_token` 私下粘贴到连接框。它只在当前页面内存中用于向本服务发送认证头，不进入 URL、localStorage 或 sessionStorage。刷新后重新提供原令牌，恢复同一角色；不自动新建替身。
 
-给两个可信 Agent 各自提供一份私密身份文件和 `/agent` 地址。它们各自验证 `/v1/whoami`，读取 `/v1/bootstrap` 和 discovery，自行选择一个空位 `vault.join`。只有两个身份都加入后才可 `vault.begin`。MCP 地址是 `/mcp`，HTTP 接口由同一个已安装内核提供。
+Agent 可读取 `/agent`，验证 `/v1/whoami`，读取 `/v1/bootstrap`，再发现 `adventure.` 工具。`adventure.look` 返回获准的当前状态、可用操作和 `revision`；普通战斗操作另带当前 `turn_id`。HTTP 和 MCP `/mcp` 使用相同服务器规则。
 
-当前提供：`join`、`look`、`begin`、`move`、`attack`、`dash`、`dodge`、`disengage`、`drop_prone`、`stand`、`react`、`end_turn`。只有 `look` 是读取；所有写入都使用唯一 operation_id，重试使用原 ID 和参数。`turn_id` 是新操作的回合前置条件，不能用上轮指令操作新回合。
+**G1 universe 是 `ashen-vault-ember`，M1 是 `ashen-vault`。** 令牌可以交给不同可信客户端，但不能跨 universe 越权。示例使用不同数据库文件，避免把旧测试场误当成新的冒险存档。
 
-## 最重要的行为边界
+## 保留原 M1 模式
 
-Agent 提交行动目标，不提交命中、伤害、骰点或自行声明的优势。服务器生成并记录骰点。普通行动受当前回合约束，但机会攻击通过显式反应窗口允许在本人回合之外发生。移动会在离开触及范围之前暂停；“等待反应”不是“已经移动完成”。
+```sh
+python -m ashen_vault.provision --db private/melee.sqlite3 --out private/warden-key.json --name Warden
+python -m ashen_vault.provision --db private/melee.sqlite3 --out private/sentinel-key.json --name Sentinel
+python -m ashen_vault.server --db private/melee.sqlite3 --port 8850
+```
 
-没有现实时间超时自动跳过回合，也没有默认自动放弃反应。断线后原身份可以继续处理原窗口。当前是两个用户控制的 NPC 近战配置，不是两个自主 LLM，也不是已完成的多职业冒险。
+默认模式仍是两个用户分别控制近战 NPC 的规则夹具，用于回归原先的回合、机会攻击和幂等合同。它不是 G1 的敌人控制方式。
 
-## 文档与验收
+## 文档
 
-[完整游戏设计](docs/GAME_DESIGN.md) 统一底座/世界分工、成长曲线、玩法循环、表现数据与资源替换验收，避免把规则测试场当作已经完成的游戏。
+[设计目标](docs/GAME_DESIGN.md) 与 [实施顺序](docs/ROADMAP.md) 定义完整游戏方向。
+[当前 G1 规则范围](docs/G1_RULES.md) 明确固定构筑、作者裁定、已开放能力和缺项。
+[本轮测试与评价](docs/G1_VALIDATION.md) 区分真实 HTTP/MCP/浏览器、确定性策略探索和没有完成的模型/真人验证。
+[架构](docs/ARCHITECTURE.md) 说明内核与世界二次开发的分工。
+原 [M1 范围](docs/RULES_SCOPE.md) 和 [M1 验证记录](docs/VALIDATION.md) 是历史基线，不改写成新成绩。
 
-- [规则范围与逐条来源](docs/RULES_SCOPE.md)：已暴露、仅基础函数、未实现、场景裁定分开说明。
-- [架构与身份边界](docs/ARCHITECTURE.md)：世界、内核、HTTP/MCP、公开前端的职责。
-- [分阶段计划](docs/ROADMAP.md)：原始目标与后续职业、法术、完整地城验收。
-- [验证记录](docs/VALIDATION.md)：真实执行结果，不把脚本测试包装成模型实测。
+## 验证命令
 
 ```sh
 python -m unittest discover -s tests -q
 python -m pip install playwright
 python -m playwright install chromium
 python tools/check_browser.py
+python tools/check_campaign_browser.py
+node --test tests/campaign_player.test.mjs
+python tools/probe_campaign.py --count 300
+python tools/explore_campaign.py
 python -m pip wheel --no-deps --wheel-dir dist .
 ```
 
-代码使用 MIT 许可；SRD 派生规则资料适用 CC BY 4.0，见 [NOTICE](NOTICE) 与 [来源记录](docs/srd-source.json)。这是独立原创场景，不代表官方产品、授权认证或完整规则兼容认证。
+JavaScript 测试中的真实轨迹来自 `check_campaign_browser.py`；没有轨迹时相关测试明确跳过，不用合成数据冒充浏览器证据。建议使用维护中的 Python 3.13/3.14 补丁版本。本机旧解释器的异常及独立复核情况见本轮验证记录，不把一次成功重跑写成已查明根因。
+
+代码 MIT；SRD 派生资料 CC BY 4.0，见 [NOTICE](NOTICE) 与 [固定来源指纹](docs/srd-source.json)。世界、任务、地图与敌人策略原创，不宣称官方授权认证。
