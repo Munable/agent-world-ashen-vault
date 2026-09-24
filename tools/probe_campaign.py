@@ -57,6 +57,7 @@ def play(seed,route='fight',style='defense',max_steps=250):
         act('interact',target='deliver');act('level_up',style=style);act('rest',kind='long')
         for room in ('gate','fork','guard','shrine'):act('travel',destination=room)
         act('interact',target='trial');fight()
+        if state['status']=='completed' and state['level']==2 and state['xp']>=900:act('level_up')
     return {'ending':state['status'],'level':state['level'],'steps':steps,'hp':state['hero']['hp'],
             'reward_sources':sorted(state['rewards']),'abilities':sorted(abilities),'event_count':len(events_seen)}
 
@@ -69,7 +70,8 @@ def run(count=300):
         groups[route]={'runs':count,'completed':sum(r['ending']=='completed' for r in rows),
                       'captured':sum(r['ending']=='captured' for r in rows),
                       'mean_steps':round(sum(r['steps'] for r in rows)/count,2),'max_steps':max(r['steps'] for r in rows),
-                      'reached_level_2':sum(r['level']==2 for r in rows),'used_action_surge':sum('action_surge' in r['abilities'] for r in rows)}
+                      'reached_level_2_or_more':sum(r['level']>=2 for r in rows),'reached_level_3':sum(r['level']==3 for r in rows),
+                      'used_action_surge':sum('action_surge' in r['abilities'] for r in rows)}
         total+=len(rows)
     report={'scope':'Seeded deterministic scripted policy, NOT human or model win rates; no production RNG seed endpoint.',
             'runs':total,'invariants':'passed','routes':groups}
