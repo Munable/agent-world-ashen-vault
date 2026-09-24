@@ -124,28 +124,55 @@ def death_save(actor: dict, draw: Draw) -> dict:
     return {'natural': natural, 'hp': actor['hp'], 'stable': actor.get('stable', False), 'dead': actor.get('dead', False)}
 
 
-def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = False, use_luck: bool = True) -> dict:
-    """Fixed equipped weapon, visible targets, no cover: closed M1 scene assumptions."""
+def melee_attack(attacker: dict, target: dict, draw: Draw, *, knockout: bool = False, use_luck: bool = True,
+                 turn_marker: int | None = None, ally_support: bool = False) -> dict:
+    """Resolved melee weapon attack for the bounded campaign and M1 fixture."""
     if incapacitated(attacker) or target.get('dead'):
         raise ValueError('invalid combatant')
     close = max(abs(a-b) for a, b in zip(attacker['position'], target['position'])) <= 1
     if not close:
         raise ValueError('outside 5-foot reach')
-    advantage = 'prone' in target['conditions'] or unconscious(target)
-    disadvantage = 'prone' in attacker['conditions'] or bool(attacker.get('sapped_by')) or (target.get('dodge', False) and not incapacitated(target) and target['speed'] > 0)
-    test = d20(draw, attacker['attack_bonus'], advantage=advantage, disadvantage=disadvantage, dc=target['ac'], attack=True, reroll_one=attacker.get('lucky', False) and use_luck)
+    vex = target.get('vexed_by') == attacker.get('id')
+    steady = bool(attacker.get('steady_aim'))
+    advantage = 'prone' in target['conditions'] or unconscious(target) or vex or steady
+    disadvantage = ('prone' in attacker['conditions'] or bool(attacker.get('sapped_by'))
+                    or (target.get('dodge', False) and not incapacitated(target) and target['speed'] > 0))
+    test = d20(draw, attacker['attack_bonus'], advantage=advantage, disadvantage=disadvantage,
+               dc=target['ac'], attack=True, reroll_one=attacker.get('lucky', False) and use_luck)
     attacker.pop('sapped_by', None)
-    critical = test['success'] and (test['critical'] or unconscious(target))
+    attacker.pop('steady_aim', None)
+    if vex:
+        target.pop('vexed_by', None)
+        target.pop('vex_origin_turn', None)
+    threshold = int(attacker.get('critical_threshold', 20))
+    critical = test['success'] and (test['natural'] >= threshold or unconscious(target))
     result = {'attack': test, 'hit': test['success'], 'critical': bool(critical), 'damage': 0, 'damage_dice': []}
     if test['success']:
-        dice = roll(draw, attacker['damage_die'], 2 if critical else 1)
-        raw = max(0, sum(dice) + attacker['damage_bonus'])
+        weapon_dice = roll(draw, attacker['damage_die'], 2 if critical else 1)
+        sneak_dice = []
+        sneak_ready = (attacker.get('sneak_attack_dice', 0) > 0 and attacker.get('weapon_finesse', False)
+                       and test['mode'] != 'disadvantage' and (test['mode'] == 'advantage' or ally_support)
+                       and (turn_marker is None or attacker.get('sneak_attack_turn') != turn_marker))
+        if sneak_ready:
+            count = int(attacker['sneak_attack_dice']) * (2 if critical else 1)
+            sneak_dice = roll(draw, 6, count)
+            if turn_marker is not None:
+                attacker['sneak_attack_turn'] = turn_marker
+        raw = max(0, sum(weapon_dice) + sum(sneak_dice) + attacker['damage_bonus'])
         kind = attacker['damage_type']
         damage = damage_amount(raw, resistant=kind in target.get('resistances', []),
                                vulnerable=kind in target.get('vulnerabilities', []), immune=kind in target.get('immunities', []))
-        result.update(damage_dice=dice, damage_bonus=attacker['damage_bonus'], damage_type=kind, raw_damage=raw, damage=damage)
+        result.update(damage_dice=weapon_dice, damage_bonus=attacker['damage_bonus'], damage_type=kind,
+                      raw_damage=raw, damage=damage)
+        if sneak_dice:
+            result['sneak_attack'] = {'dice': sneak_dice, 'count': len(sneak_dice)}
         result['effect'] = lose_hp(target, damage, critical=bool(critical), knockout=knockout)
         if attacker.get('mastery') == 'sap' and not target.get('dead'):
             target['sapped_by'] = attacker['id']
             result['mastery'] = 'sap'
+        elif attacker.get('mastery') == 'vex' and damage > 0 and not target.get('dead'):
+            target['vexed_by'] = attacker['id']
+            if turn_marker is not None:
+                target['vex_origin_turn'] = turn_marker
+            result['mastery'] = 'vex'
     return result
