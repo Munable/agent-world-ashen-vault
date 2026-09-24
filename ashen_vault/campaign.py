@@ -1,9 +1,11 @@
 """Solo campaign logic. All authoritative changes use the caller's world transaction."""
 from copy import deepcopy
+from math import ceil
 from .campaign_content import ROOMS, WEAPONS, REWARDS, make_battle
+from .characters import hp_gain, spell_slot_capacity
 from .content import ARENA
 from .engine import apply as battle_apply, active, adjacent, clear_step, RulesError, require
-from .rules import d20, heal, incapacitated
+from .rules import d20, heal, incapacitated, roll, lose_hp, damage_amount
 
 
 def path_to(battle, actor_id, destination=None):
@@ -29,38 +31,92 @@ def path_to(battle, actor_id, destination=None):
     return best
 
 
+def class_key(s):
+    return s['build'].get('class_key', 'fighter')
+
+
+def level_ready(s):
+    return (s['level'] == 1 and s['xp'] >= 300) or (s['level'] == 2 and s['xp'] >= 900)
+
+
+def _distance_feet(a, b):
+    return max(abs(a[0]-b[0]), abs(a[1]-b[1])) * 5
+
+
+def _clear_spell_path(a, b):
+    steps = max(abs(a[0]-b[0]), abs(a[1]-b[1]))
+    if steps <= 1:
+        return True
+    for index in range(1, steps):
+        cell = [round(a[0] + (b[0]-a[0]) * index / steps),
+                round(a[1] + (b[1]-a[1]) * index / steps)]
+        if cell in ARENA['walls']:
+            return False
+    return True
+
+
+def _expire_timed_effects(s):
+    until = s['flags'].get('mage_armor_until')
+    if class_key(s) == 'wizard' and until is not None and s['seconds'] >= until:
+        s['flags'].pop('mage_armor_until', None)
+        s['hero']['ac'] = s['hero'].get('unarmored_ac', 12)
+
+
 def view(state):
-    if state is None:return {'entities':{},'meta':{'joined':False,'actions':[{'label':'开始冒险','tool':'adventure.join','arguments':{}}]}}
+    if state is None:
+        return {'entities':{},'meta':{'joined':False,'actions':[
+            {'label':'以 Fighter 开始冒险','tool':'adventure.join','arguments':{'class_key':'fighter'}},
+            {'label':'以 Rogue 开始冒险','tool':'adventure.join','arguments':{'class_key':'rogue'}},
+            {'label':'以 Wizard 开始冒险','tool':'adventure.join','arguments':{'class_key':'wizard'}},
+        ]}}
     s=state;b=s['battle']
     hero=deepcopy(b['actors']['hero'] if b else s['hero'])
     if not b:hero['position']=list(ROOMS[s['room']]['position'])
     entities={'hero':hero}
     if b:entities['enemy']=deepcopy(b['actors']['enemy'])
     known={key:{'name':value['name'],'position':list(value['position']),'visited':key in s['visited']} for key,value in ROOMS.items() if key in s['visited']}
+    next_xp=300 if s['level']==1 else 900 if s['level']==2 else None
+    if s['status']=='completed' and level_ready(s):
+        quest='守印考验完成。完成 3 级职业方向后，本段成长闭环结束。'
+    elif s['ending']:
+        quest=s['ending']
+    elif s['flags'].get('delivered'):
+        quest='火种已经归营。回祭坛接受守印考验。' if s['level']>=2 else '火种已经归营。请选择 2 级成长。'
+    else:
+        quest='带回失落火种；通行可交涉或战斗。'
     meta={'joined':True,'revision':s['revision'],'room':s['room'],'room_name':ROOMS[s['room']]['name'],
           'text':ROOMS[s['room']]['text'],'known_rooms':known,'status':s['status'],'ending':s['ending'],
-          'level':s['level'],'xp':s['xp'],'next_xp':300 if s['level']==1 else None,'gold':s['gold'],'potions':s['potions'],
-          'second_wind':s['second_wind'],'action_surge':s['action_surge'],'hit_dice':s['hit_dice'],'minutes':s['seconds']/60,'long_rest_wait_seconds':max(0,57600-(s['seconds']-s['last_long_rest_end'])),
-          'style':s['build']['style'],'weapon':hero['weapon'],'build':deepcopy(s['build']),
-          'quest':s['ending'] if s['ending'] else ('火种已经归营。回祭坛使用新能力接受守印考验。' if s['level']==2 else '火种已经归营。请选择 2 级成长。') if s['flags'].get('delivered') else '带回失落火种；通行可交涉或战斗。',
-          'arena':deepcopy(ARENA) if b else {'width':14,'height':8,'walls':[],'difficult':[]},'battle':None,'pending_check':None}
+          'level':s['level'],'xp':s['xp'],'next_xp':next_xp,'gold':s['gold'],'potions':s['potions'],
+          'second_wind':s['second_wind'],'action_surge':s['action_surge'],'hit_dice':s['hit_dice'],
+          'spell_slots':deepcopy(s.get('spell_slots',{'1':0,'2':0})),'arcane_recovery':s.get('arcane_recovery',0),
+          'minutes':s['seconds']/60,'long_rest_wait_seconds':max(0,57600-(s['seconds']-s['last_long_rest_end'])),
+          'class_key':class_key(s),'style':s['build'].get('style'),'weapon':hero['weapon'],'build':deepcopy(s['build']),
+          'quest':quest,'arena':deepcopy(ARENA) if b else {'width':14,'height':8,'walls':[],'difficult':[]},
+          'battle':None,'pending_check':None}
     if b:meta['battle']={key:deepcopy(b[key]) for key in ('phase','round','turn_id','pending','order')};meta['battle']['active']=active(b)
     if s['pending_check']:meta['pending_check']={key:deepcopy(s['pending_check'][key]) for key in ('kind','test','dc')}
     meta['actions']=available(s)
-    meta['presentation']={'schema':'ashen-campaign/1','asset_manifest':'asset://ashen-vault-ember/campaign-assets.json'}
+    meta['presentation']={'schema':'ashen-campaign/2','asset_manifest':'asset://ashen-vault-ember/campaign-assets.json'}
     return {'entities':entities,'meta':meta,'resources':{'presentation_assets':{'uri':'asset://ashen-vault-ember/campaign-assets.json','media_type':'application/json','version':'1'}}}
 
 
 def available(s):
     actions=[]
     def add(label,tool,**args):actions.append({'label':label,'tool':'adventure.'+tool,'arguments':{'revision':s['revision'],**args}})
-    if s['status'] in ('captured','completed','retired'):return actions
-    if s['level']==1 and s['xp']>=300:
-        add('升到 2 级：保持防御风格','level_up',style='defense')
-        add('升到 2 级：改为决斗风格','level_up',style='dueling')
+    cls=class_key(s)
+    if level_ready(s):
+        if s['level']==1 and cls=='fighter':
+            add('升到 2 级：保持防御风格','level_up',style='defense')
+            add('升到 2 级：改为决斗风格','level_up',style='dueling')
+        elif s['level']==1:
+            add('升到 2 级','level_up')
+        else:
+            label={'fighter':'升到 3 级：Champion','rogue':'升到 3 级：Thief','wizard':'升到 3 级：Evoker'}[cls]
+            add(label,'level_up')
         return actions
+    if s['status'] in ('captured','completed','retired'):return actions
     if s['pending_check']:
-        if s['second_wind']>0:add('战术头脑：尝试加骰','resolve_check',choice='tactical')
+        if cls=='fighter' and s['level']>=2 and s['second_wind']>0:add('战术头脑：尝试加骰','resolve_check',choice='tactical')
         add('接受原检定结果','resolve_check',choice='accept');return actions
     b=s['battle']
     if b:
@@ -76,14 +132,25 @@ def available(s):
             add('击昏攻击','attack',turn_id=tid,target='enemy',knockout=True)
         if h['action']:
             for name,label in (('dodge','闪避'),('disengage','撤离'),('dash','冲刺')):add(label,name,turn_id=tid)
+            if cls=='wizard':
+                add('施放 Ray of Frost','cast',spell='ray_of_frost',target='enemy',turn_id=tid)
+                if s['spell_slots']['1']>0:add('施放 Magic Missile（1环）','cast',spell='magic_missile',target='enemy',slot_level=1,turn_id=tid)
+                if s['spell_slots']['2']>0:add('施放 Magic Missile（2环）','cast',spell='magic_missile',target='enemy',slot_level=2,turn_id=tid)
+                if s['spell_slots']['1']>0 and not s['flags'].get('mage_armor_until'):
+                    add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1,turn_id=tid)
         if h['movement']>0:
             if path_to(b,'hero'):add('靠近敌人','approach',turn_id=tid)
             if h['position'][0]>0 and path_to(b,'hero',[0,h['position'][1]]):add('向出口移动','withdraw',turn_id=tid)
         if 'prone' in h['conditions'] and h['movement']>=h['speed']//2:add('起身','stand',turn_id=tid)
         if h.get('bonus_action'):
-            if s['second_wind']>0:add('第二风息','second_wind')
+            if cls=='fighter' and s['second_wind']>0:add('第二风息','second_wind')
             if s['potions']>0:add('喝治疗药水','potion')
-        if s['level']==2 and s['action_surge']>0:add('动作如潮：额外动作','action_surge')
+            if cls=='rogue' and s['level']>=2:
+                add('灵巧动作：冲刺','cunning_action',choice='dash',turn_id=tid)
+                add('灵巧动作：撤离','cunning_action',choice='disengage',turn_id=tid)
+            if cls=='rogue' and s['level']>=3 and not h.get('moved_this_turn'):
+                add('Steady Aim','steady_aim',turn_id=tid)
+        if cls=='fighter' and s['level']>=2 and s['action_surge']>0:add('动作如潮：额外动作','action_surge')
         if h['position'][0]==0:add('离开遭遇','escape',turn_id=tid)
         add('结束回合','end_turn',turn_id=tid);return actions
     for room in ROOMS[s['room']]['neighbors']:
@@ -94,6 +161,7 @@ def available(s):
     if room=='cache' and 'cache' not in s['attempts'] and 'cache' not in s['rewards']:
         add('强行撬开补给箱（Athletics）','interact',target='cache')
         if s['build'].get('tool')=='carpenters_tools' and 'carpenters_tools' in s['build'].get('equipment',[]):add('用木匠工具调整箱盖','interact',target='cache_tools')
+        if s['build'].get('tool')=='thieves_tools' and 'thieves_tools' in s['build'].get('equipment',[]):add('用盗贼工具拆解锁舌','interact',target='cache_thieves')
     if room=='guard' and flags.get('inscription') and not flags.get('guard_access'):
         if s['gold']>=20:add('支付 20 金币','interact',target='pay_guard')
         if 'parley' not in s['attempts']:add('交涉争取通行（Intimidation）','interact',target='parley')
@@ -109,11 +177,22 @@ def available(s):
         for kind,label in (('short','短休（1 小时）'),('long','长休（8 小时）')):
             if kind=='short' or s['seconds']-s['last_long_rest_end']>=57600:add(label,'rest',kind=kind)
         if s['short_rest_open'] and s['hit_dice']>0:add('花一枚生命骰恢复','spend_hit_die')
-        for weapon,info in WEAPONS.items():add('装备'+info['name'],'equip',weapon=weapon)
+        if cls=='wizard' and s['short_rest_open'] and s.get('arcane_recovery',0)>0:
+            cap=ceil(s['level']/2)
+            if s['spell_slots']['1']<spell_slot_capacity(s['level'])['1']:
+                add('Arcane Recovery：恢复 1 个一环位','arcane_recovery',slot_level=1,count=1)
+                if cap>=2 and spell_slot_capacity(s['level'])['1']-s['spell_slots']['1']>=2:
+                    add('Arcane Recovery：恢复 2 个一环位','arcane_recovery',slot_level=1,count=2)
+            if cap>=2 and s['spell_slots']['2']<spell_slot_capacity(s['level'])['2']:
+                add('Arcane Recovery：恢复 1 个二环位','arcane_recovery',slot_level=2,count=1)
+        for weapon in s['build'].get('supported_weapons',[]):
+            info=WEAPONS[weapon];add('装备'+info['name'],'equip',weapon=weapon)
+        if cls=='wizard' and s['spell_slots']['1']>0 and not flags.get('mage_armor_until'):
+            add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1)
         if s['gold']>=50 and flags.get('potions_bought',0)<2:add('购买治疗药水（50 金币）','buy_potion')
         add('结束本次远征','retire')
     if 'prone' in s['hero']['conditions']:add('在安全位置起身','recover_posture')
-    if s['second_wind']>0:add('第二风息','second_wind')
+    if cls=='fighter' and s['second_wind']>0:add('第二风息','second_wind')
     if s['potions']>0:add('喝治疗药水','potion')
     return actions
 
