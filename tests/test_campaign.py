@@ -329,3 +329,72 @@ class CampaignTests(unittest.TestCase):
         v=view(s);v['entities']['hero']['position'][0]=99
         v['meta']['known_rooms']['camp']['position'][1]=99
         self.assertEqual(ROOMS,before)
+
+    def test_three_audited_level_one_builds_are_distinct_and_joinable(self):
+        fighter=new_campaign('fighter','fighter');rogue=new_campaign('rogue','rogue');wizard=new_campaign('wizard','wizard')
+        self.assertEqual((fighter['build']['class'],fighter['hero']['max_hp'],fighter['hero']['ac']),('Fighter',12,19))
+        self.assertEqual((rogue['build']['class'],rogue['hero']['max_hp'],rogue['hero']['weapon']),('Rogue',10,'shortsword'))
+        self.assertEqual((wizard['build']['class'],wizard['hero']['max_hp'],wizard['spell_slots']['1']),('Wizard',8,2))
+        choices=view(None)['meta']['actions']
+        self.assertEqual({a['arguments']['class_key'] for a in choices},{'fighter','rogue','wizard'})
+
+    def test_rogue_thieves_tools_and_cunning_action_are_real(self):
+        from ashen_vault.campaign_content import make_battle
+        s=new_campaign('rogue','rogue')
+        for room in ('gate','fork','cache'):
+            s,_=command(s,'travel',destination=room)
+            if room=='gate':s,_=command(s,'interact',target='inscription')
+        self.assertTrue(any(a['arguments'].get('target')=='cache_thieves' for a in available(s)))
+        s,events=command(s,'interact',dice(2,8),target='cache_thieves',use_luck=False)
+        self.assertEqual(s['rewards']['cache']['resolution'],'thieves_tools_check')
+        s['xp']=300;s,_=command(s,'level_up')
+        self.assertEqual((s['level'],s['hero']['max_hp'],s['hero']['hp']),(2,17,10))
+        s['battle']=make_battle(s,dice(2,18));tid=s['battle']['turn_id']
+        before=s['battle']['actors']['hero']['movement']
+        s,events=command(s,'cunning_action',choice='dash',turn_id=tid)
+        self.assertEqual(s['battle']['actors']['hero']['movement'],before+30)
+        self.assertFalse(s['battle']['actors']['hero']['bonus_action'])
+
+    def test_wizard_spell_slots_spell_effects_and_arcane_recovery(self):
+        from ashen_vault.campaign_content import make_battle
+        s=new_campaign('wizard','wizard')
+        s,events=command(s,'cast',spell='mage_armor',target='hero',slot_level=1)
+        self.assertEqual((s['hero']['ac'],s['spell_slots']['1']),(15,1))
+        s['xp']=300;s,_=command(s,'level_up')
+        self.assertEqual((s['level'],s['spell_slots']['1'],s['hero']['hp'],s['hero']['max_hp']),(2,3,8,14))
+        s['spell_slots']['1']=1
+        s,_=command(s,'rest',kind='short')
+        s,events=command(s,'arcane_recovery',slot_level=1,count=1)
+        self.assertEqual((s['spell_slots']['1'],s['arcane_recovery']),(2,0))
+        s['room']='guard';s['battle']=make_battle(s,dice(2,18))
+        s['battle']['actors']['enemy'].update(position=[4,2],hp=99,max_hp=99)
+        tid=s['battle']['turn_id']
+        s,events=command(s,'cast',dice(15,14,6),spell='ray_of_frost',target='enemy',turn_id=tid,use_luck=False)
+        self.assertEqual(s['battle']['actors']['enemy']['hp'],93)
+        self.assertEqual(s['battle']['actors']['enemy']['speed_penalty'],10)
+
+    def test_magic_missile_spends_one_slot_and_uses_slot_level_darts(self):
+        from ashen_vault.campaign_content import make_battle
+        s=new_campaign('wizard','wizard');s['xp']=300;s,_=command(s,'level_up')
+        s['room']='guard';s['battle']=make_battle(s,dice(2,18))
+        s['battle']['actors']['enemy'].update(position=[4,2],hp=99,max_hp=99)
+        tid=s['battle']['turn_id'];before=s['spell_slots']['1']
+        s,events=command(s,'cast',dice(1,2,3),spell='magic_missile',target='enemy',slot_level=1,turn_id=tid)
+        spell=next(e for e in events if e['kind']=='spell')['data']['result']
+        self.assertEqual((spell['darts'],spell['damage'],s['spell_slots']['1']),(3,9,before-1))
+
+    def test_level_three_subclasses_change_rules_without_free_healing(self):
+        expected={'fighter':('Champion',28),'rogue':('Thief',24),'wizard':('Evoker',20)}
+        for cls,(subclass,max_hp) in expected.items():
+            s=new_campaign(cls,cls);s['xp']=300
+            s,_=command(s,'level_up',**({'style':'defense'} if cls=='fighter' else {}))
+            s['hero']['hp']=1;s['xp']=900;s['status']='completed'
+            s,events=command(s,'level_up')
+            self.assertEqual((s['level'],s['build']['subclass'],s['hero']['max_hp'],s['hero']['hp']),(3,subclass,max_hp,1))
+            self.assertEqual(view(s)['meta']['actions'],[])
+
+    def test_unimplemented_wizard_spell_is_rejected_not_approximated(self):
+        s=new_campaign('wizard','wizard')
+        with self.assertRaisesRegex(RulesError,'UnsupportedSpell'):
+            command(s,'cast',spell='sleep',target='enemy',slot_level=1)
+
