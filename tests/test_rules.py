@@ -158,3 +158,33 @@ class RulesTests(unittest.TestCase):
     def test_stable_creature_does_not_roll(self):
         actor = self.down(); actor['stable'] = True
         with self.assertRaises(ValueError): rules.death_save(actor, dice())
+
+    def test_champion_nineteen_is_a_real_critical(self):
+        from ashen_vault.characters import hero_for
+        attacker=hero_for('fighter');target=combatant('sentinel')
+        attacker['critical_threshold']=19;target['position']=[4,2]
+        result=rules.melee_attack(attacker,target,dice(19,2,3))
+        self.assertTrue(result['critical'])
+        self.assertEqual(result['damage_dice'],[2,3])
+
+    def test_rogue_vex_enables_next_attack_and_sneak_attack(self):
+        from ashen_vault.characters import hero_for
+        attacker=hero_for('rogue');target=combatant('warden')
+        attacker['position']=[3,2];target['position']=[4,2];target['hp']=99;target['max_hp']=99
+        first=rules.melee_attack(attacker,target,dice(15,2),turn_marker=1)
+        self.assertTrue(first['hit']);self.assertEqual(first['mastery'],'vex')
+        self.assertEqual(target['vexed_by'],'hero');self.assertNotIn('sneak_attack',first)
+        second=rules.melee_attack(attacker,target,dice(5,15,3,4),turn_marker=2)
+        self.assertEqual(second['attack']['mode'],'advantage')
+        self.assertEqual(second['sneak_attack']['dice'],[4])
+        self.assertNotIn('vexed_by',target)
+
+    def test_sneak_attack_is_once_per_turn_marker(self):
+        from ashen_vault.characters import hero_for
+        attacker=hero_for('rogue');target=combatant('warden')
+        attacker['position']=[3,2];target['position']=[4,2];target['hp']=99;target['max_hp']=99
+        first=rules.melee_attack(attacker,target,dice(15,2,4),turn_marker=7,ally_support=True)
+        self.assertIn('sneak_attack',first)
+        second=rules.melee_attack(attacker,target,dice(15,2),turn_marker=7,ally_support=True)
+        self.assertNotIn('sneak_attack',second)
+
