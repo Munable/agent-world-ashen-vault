@@ -177,7 +177,8 @@ class RulesTests(unittest.TestCase):
         second=rules.melee_attack(attacker,target,dice(5,15,3,4),turn_marker=2)
         self.assertEqual(second['attack']['mode'],'advantage')
         self.assertEqual(second['sneak_attack']['dice'],[4])
-        self.assertNotIn('vexed_by',target)
+        self.assertEqual(target['vexed_by'],'hero')
+        self.assertEqual(target['vex_origin_turn'],2)
 
     def test_sneak_attack_is_once_per_turn_marker(self):
         from ashen_vault.characters import hero_for
@@ -185,6 +186,6 @@ class RulesTests(unittest.TestCase):
         attacker['position']=[3,2];target['position']=[4,2];target['hp']=99;target['max_hp']=99
         first=rules.melee_attack(attacker,target,dice(15,2,4),turn_marker=7,ally_support=True)
         self.assertIn('sneak_attack',first)
-        second=rules.melee_attack(attacker,target,dice(15,2),turn_marker=7,ally_support=True)
+        second=rules.melee_attack(attacker,target,dice(15,14,2),turn_marker=7,ally_support=True)
         self.assertNotIn('sneak_attack',second)
 
