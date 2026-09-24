@@ -1,8 +1,8 @@
 {
-  "version": "0.2.0a1",
+  "version": "0.2.0a2",
   "base_commit": "63baacfaddcc1bf1568b23704d5325d823278579",
-  "milestone": "G1 playable solo preview, full acceptance remains partial",
-  "python_tests": 133,
+  "milestone": "G1 playable solo preview with fixed-build trait/language/tool closure; full acceptance remains partial",
+  "python_tests": 138,
   "browser_suites": [
     "M1 public melee observer",
     "G1 private playable campaign"
@@ -19,28 +19,28 @@
     "routes": {
       "paid": {
         "runs": 300,
-        "completed": 299,
-        "captured": 1,
-        "mean_steps": 27.88,
-        "max_steps": 47,
+        "completed": 297,
+        "captured": 3,
+        "mean_steps": 28.87,
+        "max_steps": 50,
         "reached_level_2": 300,
         "used_action_surge": 300
       },
       "fight": {
         "runs": 300,
-        "completed": 294,
-        "captured": 6,
-        "mean_steps": 33.66,
-        "max_steps": 54,
+        "completed": 292,
+        "captured": 8,
+        "mean_steps": 34.63,
+        "max_steps": 55,
         "reached_level_2": 296,
         "used_action_surge": 296
       },
       "parley": {
         "runs": 300,
-        "completed": 297,
-        "captured": 3,
-        "mean_steps": 30.97,
-        "max_steps": 55,
+        "completed": 295,
+        "captured": 5,
+        "mean_steps": 32.04,
+        "max_steps": 54,
         "reached_level_2": 298,
         "used_action_surge": 298
       }
@@ -50,8 +50,8 @@
     "scope": "Seeded exploration of offered actions and stale-intent rejection, not a player success-rate test.",
     "seeds": 60,
     "maximum_steps_per_seed": 100,
-    "accepted_actions": 4949,
-    "stale_intents_rejected": 4949,
+    "accepted_actions": 5074,
+    "stale_intents_rejected": 5074,
     "terminal_paths": 43,
     "action_kinds": [
       "action_surge",
@@ -96,12 +96,36 @@
     "autonomous-model validation",
     "production reliability"
   ],
-  "independent_verified_run": {
+  "candidate_local_verification": {
+    "python_tests": "138/138",
+    "m1_browser": "passed",
+    "g1_browser": {
+      "lost_response_receipt_recovers_without_new_action": true,
+      "brave_dread_resolution_has_visible_feedback": true,
+      "actual_browser_growth_1_to_2": true,
+      "no_free_upgrade_healing": true,
+      "resource_pack_switch_without_world_write": true,
+      "reload_and_process_restart_restore_without_historical_animation": true,
+      "visible_attack_feedback": true,
+      "upgraded_action_surge_used_in_later_encounter": true,
+      "solo_scripted_enemy": true,
+      "terminal_result_observed": true,
+      "no_token_in_url_body_or_browser_storage": true,
+      "revocation_clears_private_dom": true,
+      "mobile_no_overflow": true,
+      "page_errors": []
+    },
+    "javascript_tests": "12/12 including current real browser trace",
+    "wheel": "agent_world_ashen_vault-0.2.0a2-py3-none-any.whl",
+    "wheel_sha256": "86c274e12b81a0ba21c9490c878faa67da6c46684e9d43fbf89867353fb2db43"
+  },
+  "previous_independent_verified_run": {
     "commit": "b103ceeffc922d900404d8eae19286ca75416505",
     "run_id": 35939126236,
     "status": "completed",
     "conclusion": "success",
     "ubuntu": "133 Python tests + 900 strategy traces + 4949 exploration actions and stale rejections + M1/G1 browsers + 12 JS tests including real trace + wheel",
     "windows": "133 Python tests + 900 strategy traces + 4949 exploration actions and stale rejections + wheel; browser/JS steps skipped"
-  }
+  },
+  "independent_verified_run": null
 }

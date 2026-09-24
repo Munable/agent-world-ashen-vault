@@ -44,6 +44,8 @@ export function sample(before,after,cue,t){
  } else if(cue.name==='campaign.reward')fx.text=[d.after.xp>d.before.xp?'+'+(d.after.xp-d.before.xp)+' XP':'',d.after.gold>d.before.gold?'+'+(d.after.gold-d.before.gold)+' GP':'',d.after.potions>d.before.potions?'+'+(d.after.potions-d.before.potions)+' 药水':''].filter(Boolean).join(' · ');
  else if(cue.name==='campaign.level_up'&&t>=.5)fx.text='升至 '+d.after+' 级';
  else if(cue.name==='campaign.healing')fx.text='+'+(d.after-d.before)+' HP';
+ else if(cue.name==='campaign.check')fx.text=(d.test?.mode==='advantage'?'优势 · ':d.test?.mode==='disadvantage'?'劣势 · ':'')+d.check+' '+d.test.total;
+ else if(cue.name==='campaign.check_result')fx.text=d.success?'检定成功':'检定失败';
  else if(cue.name==='campaign.item')fx.text=d.outcome==='purchased'?'获得药水 · -50 金币':'已取得火种';
  else if(cue.name==='campaign.ability')fx.text='动作如潮 · 额外行动';
  return {frame,fx};

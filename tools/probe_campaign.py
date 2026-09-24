@@ -49,7 +49,10 @@ def play(seed,route='fight',style='defense',max_steps=250):
     act('travel',destination='gate');act('interact',target='inscription');act('travel',destination='fork');act('travel',destination='guard')
     act('interact',target='pay_guard' if route=='paid' else 'parley' if route=='parley' else 'challenge');fight()
     if state['status']=='exploring':
-        act('travel',destination='shrine');act('interact',target='take_ember')
+        act('travel',destination='shrine')
+        while not state['flags'].get('dread_cleared'):
+            act('interact',target='dread_recover' if 'frightened' in state['hero']['conditions'] else 'dread')
+        act('interact',target='take_ember')
         for room in ('guard','fork','gate','camp'):act('travel',destination=room)
         act('interact',target='deliver');act('level_up',style=style);act('rest',kind='long')
         for room in ('gate','fork','guard','shrine'):act('travel',destination=room)

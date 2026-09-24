@@ -23,11 +23,17 @@ def main():
         page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
         def captured(response):
             if response.status!=200:return
-            if response.url.endswith('/v1/views/adventure/snapshot'):
-                value=response.json()
-                if not initial:initial.append(value['snapshot'])
-            elif response.url.endswith('/v1/views/timeline'):
-                trace.extend(response.json()['events'])
+            try:
+                if response.url.endswith('/v1/views/adventure/snapshot'):
+                    value=response.json()
+                    if not initial:initial.append(value['snapshot'])
+                elif response.url.endswith('/v1/views/timeline'):
+                    trace.extend(response.json()['events'])
+            except Exception as exc:
+                # The intentional lost-response probe can dispose a Chromium response body before
+                # this auxiliary evidence listener reads it. Treat only that protocol race as absent
+                # evidence; all other capture failures remain page-test errors.
+                if 'No resource with given identifier found' not in str(exc):errors.append('evidence capture: '+str(exc))
         page.on('response',captured)
         page.on('request',lambda r:requests.append((r.url,r.post_data or '')))
         def ready(revision=None):
@@ -76,13 +82,21 @@ def main():
         click('interact',target='inscription')
         click('travel',destination='fork');click('travel',destination='guard')
         click('interact',target='pay_guard');click('travel',destination='shrine')
+        observe_effect('feedback');click('interact',wait=False,target='dread');saw_effect();ready()
+        for _ in range(8):
+            can_take=page.evaluate("() => [...document.querySelectorAll('#actions button')].some(b => JSON.parse(b.dataset.arguments).target === 'take_ember')")
+            if can_take:break
+            click('interact',target='dread_recover')
+        else:raise AssertionError('Brave recovery did not clear authored dread within bounded browser probe')
         click('interact',target='take_ember')
+        expect(page.locator('#log')).to_contain_text('dread_save')
+        report['brave_dread_resolution_has_visible_feedback']=True
         for room in ('guard','fork','gate','camp'):click('travel',destination=room)
         click('interact',target='deliver')
         expect(page.locator('#stats')).to_contain_text('经验 300/300')
         observe_effect('feedback');click('level_up',wait=False,style='defense');saw_effect()
         page.screenshot(path=str(output/'campaign-level-feedback.png'),full_page=True)
-        ready(13);expect(page.locator('#stats')).to_contain_text('战士 2 级')
+        ready();expect(page.locator('#stats')).to_contain_text('战士 2 级')
         expect(page.locator('#stats')).to_contain_text('HP 12/20')
         before=page.evaluate('window.__ashenDebug()');page.select_option('#skin','moon');after=page.evaluate('window.__ashenDebug()')
         assert before['revision']==after['revision'] and before['level']==after['level']
