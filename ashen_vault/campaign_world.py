@@ -5,6 +5,7 @@ from agent_world.errors import RuleViolation
 from .campaign_content import new_campaign
 from .campaign import apply, view
 from .engine import RulesError
+from .coop import SPECS as PARTY_SPECS, STATE_RULE as PARTY_STATE_RULE, authorize_party_state
 
 UNIVERSE='ashen-vault-ember'
 
@@ -14,7 +15,10 @@ def schema(props=None, required=()):
 
 
 def load(ctx):return ctx.get_state('campaign:'+ctx.actor_role_id,'state')
-def owned(ctx,scope,key,access):return scope=='campaign:'+ctx.actor_role_id and key=='state'
+def owned(ctx,scope,key,access):
+    if scope=='campaign:'+ctx.actor_role_id and key=='state':return True
+    if scope.startswith('party:'):return authorize_party_state(ctx,scope,key,access)
+    return False
 
 
 def cues_for(ctx,events):
@@ -78,11 +82,12 @@ for name in ('dash','dodge','disengage','drop_prone','stand','end_turn','approac
 register('move',{'turn_id':TURN,'path':{'type':'array','items':CELL,'minItems':1,'maxItems':12}},('turn_id','path'))
 register('attack',{'turn_id':TURN,'target':TEXT,'knockout':BOOL,'use_luck':BOOL},('turn_id','target'))
 register('react',{'window_id':TEXT,'choice':{'enum':['attack','decline']},'knockout':BOOL,'use_luck':BOOL},('window_id','choice'))
+SPECS.extend(PARTY_SPECS)
 INITIAL=new_campaign('schema-example')
 STATE=schema({key: {'type': 'integer' if type(value) is int else 'string' if isinstance(value,str) else 'array' if isinstance(value,list) else 'object' if isinstance(value,dict) else 'boolean' if type(value) is bool else ['object','string','null']} for key,value in INITIAL.items()},tuple(INITIAL))
-WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2A preview',tuple(SPECS),state_rules=(StateRule('campaign:','state',STATE),),
+WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2 preview',tuple(SPECS),state_rules=(StateRule('campaign:','state',STATE),PARTY_STATE_RULE),
     state_authorizer=owned,bootstrap=bootstrap,views=(ViewSpec('adventure',scene,timeline=True),),
     entry_instructions='Use the user-held token for this universe. Read adventure.look, choose one audited class on adventure.join, then use current offered tools/revision. '
-    'Fighter/Rogue/Wizard 1-3 constrained solo campaign with authored NPC policies and a finite Wizard spell list; not complete SRD and not co-op yet. Server rolls and resolves all actions. '
+    'Fighter/Rogue/Wizard 1-3 constrained solo campaign plus a 1-3 identity shared-state co-op preview; finite rules, not complete SRD. Server rolls and resolves all actions. '
     'Only the user decides their reaction/ability windows; NPCs follow rules with a bounded driver. Reuse operation_id for a retry. '
     'World time, combat turns and animation time are different. No FreeAPI or required background model. Never reveal credentials.')
