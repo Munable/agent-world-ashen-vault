@@ -1,6 +1,6 @@
 const clone=x=>JSON.parse(JSON.stringify(x));
 export function validateManifest(manifest){
- if(manifest?.version!==1||manifest.schema!=='ashen-campaign/1')throw Error('Unsupported asset contract');
+ if(manifest?.version!==1||manifest.schema!=='ashen-campaign/2')throw Error('Unsupported asset contract');
  for(const binding of Object.values(manifest.bindings||{}))if(!Number.isFinite(binding.duration_ms)||binding.duration_ms<0||binding.duration_ms>1200)throw Error('Invalid binding duration');
  if(!Object.keys(manifest.skins||{}).length)throw Error('No skin binding');
  for(const skin of Object.values(manifest.skins)){
@@ -41,6 +41,14 @@ export function sample(before,after,cue,t){
    fx.attack={actor,target,start:d.before[actor]?.position,end:d.before[target]?.position,hit:attack.hit,damage:attack.damage,critical:attack.critical,progress:attackT};
    if(attackT>=.55&&frame.entities[target])frame.entities[target].hp=d.after[target].hp;
   }
+ } else if(cue.name==='campaign.spell'){
+  const r=d.result;frame.entities=clone(before.entities);
+  if(r?.target&&frame.entities[r.target]&&after.entities[r.target]){
+   fx.attack={actor:'hero',target:r.target,start:before.entities.hero?.position,end:before.entities[r.target]?.position,
+              hit:r.hit!==false,damage:r.damage||0,critical:false,progress:t};
+   if(t>=.55)frame.entities[r.target].hp=after.entities[r.target].hp;
+  }
+  fx.text=r?.spell==='mage_armor'?'Mage Armor · AC '+r.ac:r?.spell==='magic_missile'?'Magic Missile · '+r.damage+' 伤害':r?.spell==='ray_of_frost'?(r.hit?'Ray of Frost · '+r.damage+' 伤害':'Ray of Frost · 未命中'):'法术已结算';
  } else if(cue.name==='campaign.reward')fx.text=[d.after.xp>d.before.xp?'+'+(d.after.xp-d.before.xp)+' XP':'',d.after.gold>d.before.gold?'+'+(d.after.gold-d.before.gold)+' GP':'',d.after.potions>d.before.potions?'+'+(d.after.potions-d.before.potions)+' 药水':''].filter(Boolean).join(' · ');
  else if(cue.name==='campaign.level_up'&&t>=.5)fx.text='升至 '+d.after+' 级';
  else if(cue.name==='campaign.healing')fx.text='+'+(d.after-d.before)+' HP';
