@@ -279,4 +279,3 @@ class CampaignTests(unittest.TestCase):
         v=view(s);v['entities']['hero']['position'][0]=99
         v['meta']['known_rooms']['camp']['position'][1]=99
         self.assertEqual(ROOMS,before)
-

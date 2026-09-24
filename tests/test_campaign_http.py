@@ -130,4 +130,3 @@ class CampaignHTTPTests(unittest.TestCase):
         self.client.headers['Authorization']='Bearer '+observe
         self.assertEqual(self.call('look').status_code,200)
         self.assertEqual(self.call('travel',{'revision':0,'destination':'gate'}).status_code,403)
-

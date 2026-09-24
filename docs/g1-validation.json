@@ -95,5 +95,13 @@
     "real-player balance",
     "autonomous-model validation",
     "production reliability"
-  ]
+  ],
+  "independent_verified_run": {
+    "commit": "b103ceeffc922d900404d8eae19286ca75416505",
+    "run_id": 35939126236,
+    "status": "completed",
+    "conclusion": "success",
+    "ubuntu": "133 Python tests + 900 strategy traces + 4949 exploration actions and stale rejections + M1/G1 browsers + 12 JS tests including real trace + wheel",
+    "windows": "133 Python tests + 900 strategy traces + 4949 exploration actions and stale rejections + wheel; browser/JS steps skipped"
+  }
 }
