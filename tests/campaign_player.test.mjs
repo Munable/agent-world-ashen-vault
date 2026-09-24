@@ -70,5 +70,5 @@ test('real browser trace has the same final facts with both resource packs',asyn
   const applied=p.stats.applied;await p.play(trace.events,{now:trace.events.at(-1).occurred_at});assert.equal(p.stats.applied,applied);
   outputs.push(p.snapshot);
  }
- assert.deepEqual(outputs[0],outputs[1]);assert.equal(outputs[0].meta.level,2);assert.equal(outputs[0].meta.xp,300);
+ assert.deepEqual(outputs[0],outputs[1]);assert.equal(outputs[0].meta.level,3);assert.equal(outputs[0].meta.xp,900);
 });
