@@ -158,3 +158,39 @@ class CampaignHTTPTests(unittest.TestCase):
             count=c.execute("SELECT COUNT(*) FROM world_state WHERE universe=? AND scope=?", (UNIVERSE,'campaign:'+self.role)).fetchone()[0]
         self.assertEqual(count,0)
 
+    def test_shared_party_requires_invite_membership_and_own_turn(self):
+        def invoke(client,name,args,operation):
+            return client.post('/v1/functions/'+name+'/invoke',json={'operation_id':operation,'arguments':args})
+        created=invoke(self.client,'party.create',{'class_key':'fighter'},'party-create')
+        self.assertEqual(created.status_code,200,created.text)
+        payload=created.json()['result'];party_id=payload['party']['party_id'];invite=payload['invite_code']
+        self.assertNotIn(invite,json.dumps(payload['party']))
+
+        other_role=self.app.state.runtime.create_role('合作法师')['role_id']
+        other_token=self.app.state.runtime.issue_identity_token(UNIVERSE,other_role)['token']
+        with TestClient(create_app(self.db,campaign=True)) as other:
+            other.headers['Authorization']='Bearer '+other_token
+            denied=invoke(other,'party.look',{'party_id':party_id},'party-look-denied')
+            self.assertGreaterEqual(denied.status_code,400)
+            wrong=invoke(other,'party.join',{'party_id':party_id,'invite_code':'0'*16,'class_key':'wizard'},'party-wrong')
+            self.assertGreaterEqual(wrong.status_code,400)
+            joined=invoke(other,'party.join',{'party_id':party_id,'invite_code':invite,'class_key':'wizard'},'party-join')
+            self.assertEqual(joined.status_code,200,joined.text)
+            self.assertEqual(joined.json()['result']['party']['your_seat'],'p2')
+
+            self.assertEqual(invoke(self.client,'party.ready',{'party_id':party_id,'ready':True},'party-ready-a').status_code,200)
+            self.assertEqual(invoke(other,'party.ready',{'party_id':party_id,'ready':True},'party-ready-b').status_code,200)
+            started=invoke(self.client,'party.begin',{'party_id':party_id},'party-begin')
+            self.assertEqual(started.status_code,200,started.text)
+            party=started.json()['result']['party'];self.assertEqual(party['phase'],'active')
+            self.assertEqual(set(party['members']),{'p1','p2'})
+            active_seat=party['battle']['order'][party['battle']['index']]
+            self.assertIn(active_seat,('p1','p2'))
+            turn_id=party['battle']['turn_id']
+            wrong_client=other if active_seat=='p1' else self.client
+            right_client=self.client if active_seat=='p1' else other
+            rejected=invoke(wrong_client,'party.end_turn',{'party_id':party_id,'turn_id':turn_id},'party-wrong-turn')
+            self.assertGreaterEqual(rejected.status_code,400)
+            accepted=invoke(right_client,'party.end_turn',{'party_id':party_id,'turn_id':turn_id},'party-right-turn')
+            self.assertEqual(accepted.status_code,200,accepted.text)
+
