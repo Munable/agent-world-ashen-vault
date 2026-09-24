@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "schema": "ashen-campaign/1",
+  "schema": "ashen-campaign/2",
   "bindings": {
     "campaign.joined": {
       "type": "joined",
@@ -73,6 +73,10 @@
     "campaign.state_changed": {
       "type": "state_changed",
       "duration_ms": 0
+    },
+    "campaign.spell": {
+      "type": "spell",
+      "duration_ms": 550
     }
   },
   "skins": {
