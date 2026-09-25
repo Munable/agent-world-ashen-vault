@@ -37,10 +37,10 @@ def create_app(db, origin='http://127.0.0.1:8850', *, campaign=False):
     @api.get('/agent', response_class=PlainTextResponse)
     def guide():
         if campaign:
-            return ('Ashen Vault G1 solo preview. Use the user-held token for ashen-vault-ember, never create a substitute identity.\n'
+            return ('Ashen Vault G2 Phase A preview. Use the user-held token for ashen-vault-ember, never create a substitute identity.\n'
                     f'GET {origin}/v1/whoami then {origin}/v1/bootstrap. Discover prefix=adventure. and inspect current schemas.\n'
                     'POST /v1/functions/<tool>/invoke with operation_id and arguments for writes; omit operation_id for look.\n'
-                    'Read adventure.look. Join once; use offered actions and the current revision and turn_id. React only to your pending window.\n'
+                    'Read adventure.look. On first join choose one offered Fighter/Rogue/Wizard build; an existing campaign keeps its original class. Use offered actions and the current revision/turn_id. React only to your pending window. party.* is a separate shared combat/rest preview, not the six-region co-op campaign.\n'
                     'Missing credentials: stop. Unsupported actions: report the limit. NPCs are script-driven, not external Agents.\n'
                     'Never supply rolls/damage/rewards or assume resumed success from merely reading this guide.\n'
                     'Use SAME operation_id and args after an uncertain response. View /v1/receipts/<id> to verify.\n'
@@ -103,7 +103,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run the isolated Ashen Vault M1 laboratory.')
     parser.add_argument('--db', default='private/ashen-vault.sqlite3')
     parser.add_argument('--port', type=int, default=8850)
-    parser.add_argument('--campaign', action='store_true', help='Run the private G1 preview instead of the M1 laboratory')
+    parser.add_argument('--campaign', action='store_true', help='Run the private G2 preview instead of the M1 laboratory')
     args = parser.parse_args()
     import uvicorn
     uvicorn.run(create_app(args.db, f'http://127.0.0.1:{args.port}',campaign=args.campaign), host='127.0.0.1', port=args.port, log_level='warning')

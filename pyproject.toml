@@ -7,7 +7,7 @@ name = "agent-world-ashen-vault"
 version = "0.3.0a1"
 description = "Bounded SRD 5.2.1 three-class 1-3 campaign and shared-state co-op preview on Agent World."
 requires-python = ">=3.11"
-dependencies = ["agent-world @ git+https://github.com/Munable/agent-world.git@a8f58bb3ccd666be7e48739f58d9252a58fa742a"]
+dependencies = ["agent-world @ git+https://github.com/Munable/agent-world.git@b65ddabea74b75a387e90ebcadcba0df680588cf"]
 
 [project.scripts]
 ashen-vault = "ashen_vault.server:main"

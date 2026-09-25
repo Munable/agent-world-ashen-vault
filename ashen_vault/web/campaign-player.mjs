@@ -55,7 +55,16 @@ export function sample(before,after,cue,t){
  else if(cue.name==='campaign.check')fx.text=(d.test?.mode==='advantage'?'优势 · ':d.test?.mode==='disadvantage'?'劣势 · ':'')+d.check+' '+d.test.total;
  else if(cue.name==='campaign.check_result')fx.text=d.success?'检定成功':'检定失败';
  else if(cue.name==='campaign.item')fx.text=d.outcome==='purchased'?'获得药水 · -50 金币':'已取得火种';
- else if(cue.name==='campaign.ability'){const names={action_surge:'动作如潮',cunning_action:'灵巧动作',steady_aim:'Steady Aim',fast_hands:'Fast Hands',arcane_recovery:'Arcane Recovery',spell_preparation:'法术准备'};fx.text=names[d.ability]||d.ability||'职业能力';}
+ else if(cue.name==='campaign.ability'){
+  const ability=d.ability;
+  fx.text=ability==='action_surge'?'动作如潮 · 额外行动':
+          ability==='cunning_action'?'灵巧动作 · '+(d.choice==='dash'?'冲刺':'撤离'):
+          ability==='steady_aim'?'Steady Aim · 下一次攻击取得优势':
+          ability==='fast_hands'?'Fast Hands · 操作场景物件':
+          ability==='arcane_recovery'?'奥术恢复 · 恢复法术位':
+          ability==='spell_preparation'?'法术准备':
+          '职业能力 · '+ability;
+ }
  return {frame,fx};
 }
 export class Playback{

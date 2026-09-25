@@ -72,3 +72,17 @@ test('real browser trace has the same final facts with both resource packs',asyn
  }
  assert.deepEqual(outputs[0],outputs[1]);assert.equal(outputs[0].meta.level,3);assert.equal(outputs[0].meta.xp,900);
 });
+
+test('class-specific ability feedback is not mislabeled as Action Surge',()=>{
+ const before=structuredClone(initial);
+ for(const [ability,choice,expected] of [
+  ['cunning_action','dash','灵巧动作 · 冲刺'],
+  ['steady_aim',undefined,'Steady Aim · 下一次攻击取得优势'],
+  ['fast_hands',undefined,'Fast Hands · 操作场景物件'],
+  ['arcane_recovery',undefined,'奥术恢复 · 恢复法术位'],
+ ]){
+  const e=event(0,'ability','ability-'+ability);e.cue.data.frame=structuredClone(before);
+  e.cue.data.event={ability,...(choice?{choice}:{})};
+  assert.equal(sample(before,e.cue.data.frame,e.cue,.8).fx.text,expected);
+ }
+});

@@ -40,7 +40,7 @@ Blur 使用专注。攻击 Blur 目标受到劣势；目标受到伤害时按服
 
 ## Fighter
 
-G1 的 Second Wind、Action Surge、Tactical Mind、Sap、两种 2 级战斗风格继续保留。3 级固定进入 Champion；19–20 的扩展重击由攻击规则直接判断，相关体能能力在作者能力检定中有实际使用点。
+G1 的 Second Wind、Action Surge、Tactical Mind、Sap、两种 2 级战斗风格继续保留。3 级固定进入 Champion；19–20 的扩展重击由攻击规则直接判断，Remarkable Athlete 已用于先攻与作者 Athletics 检定。**重击后立即移动至多一半 Speed 且不触发机会攻击的部分尚未开放**，因此 Champion 仍是部分闭包。
 
 ## 合作预览
 
@@ -51,3 +51,10 @@ G1 的 Second Wind、Action Surge、Tactical Mind、Sap、两种 2 级战斗风�
 ## 仍然不支持
 
 完整 SRD 法术表、完整远程武器与装备切换、完整 Hide/Search/Help/Ready、自由文本 DM 裁定、所有状态与死亡后救助流程、完整多人探索任务、角色编辑器和 1–20 级成长都不在 0.3.0a1 的承诺范围内。
+
+
+## G1 存档与共享状态基础设施
+
+G2 将 world/function/view 合同显式升到 v2，但保持 state_version=1 并接受 G1 顶层状态形状。旧存档在读取时按原 Fighter 规范化，在下一次真实写入时持久为 G2 数据；已完成旧守印考验的 0 XP 记录补为当前 600 XP，而不换 role_id、不免费治疗。再次 `adventure.join` 不能把旧 Fighter 改成别的职业。
+
+party 成员授权使用 Agent World 0.14.0 的受限 `authorization_state` 查询完成。该查询只允许在 `state_authorizer` 回调执行期间使用；世界不再直接读取 SQLite 连接。

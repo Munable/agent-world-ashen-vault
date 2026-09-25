@@ -68,7 +68,12 @@ def main():
                 print('PLAYBACK_FAILURE',json.dumps(page.evaluate('window.__ashenDebug()')))
                 page.screenshot(path=str(output/'campaign-failed-playback.png'),full_page=True)
                 raise
-        page.goto(server.url+'/watch',wait_until='networkidle');connect();click('join')
+        page.goto(server.url+'/watch',wait_until='networkidle');connect()
+        class_choices={json.loads(b.get_attribute('data-arguments')).get('class_key') for b in page.locator('#actions button').all()
+                       if b.get_attribute('data-tool')=='adventure.join'}
+        assert class_choices=={'fighter','rogue','wizard'}
+        report['three_class_choices_visible']=True
+        click('join',class_key='fighter')
         assert page.evaluate('window.__ashenDebug().revision')==0
         # Drop only the HTTP response after a real committed write.
         def drop_response(route):

@@ -62,6 +62,26 @@ def _expire_timed_effects(s):
         s['hero']['ac'] = s['hero'].get('unarmored_ac', 12)
 
 
+def _normalize_state(state):
+    """Interpret persisted G1 Fighter state as G2 without replacing its role or identity."""
+    s=deepcopy(state)
+    if int(s.get('version',1))>=2:return s
+    s['version']=2
+    s.setdefault('spell_slots',{'1':0,'2':0});s.setdefault('arcane_recovery',0)
+    build=s.setdefault('build',{});build.setdefault('class_key','fighter')
+    build.setdefault('supported_weapons',list(build.get('masteries',['flail','morningstar','mace'])))
+    hero=s.setdefault('hero',{});hero.setdefault('class_key','fighter')
+    hero.setdefault('critical_threshold',20);hero.setdefault('remarkable_athlete',False)
+    battle=s.get('battle')
+    if battle and 'hero' in battle.get('actors',{}):
+        bh=battle['actors']['hero'];bh.setdefault('class_key','fighter')
+        bh.setdefault('critical_threshold',20);bh.setdefault('remarkable_athlete',False)
+    old_trial=s.get('rewards',{}).get('seal_trial')
+    if old_trial is not None and int(old_trial.get('xp',0))==0:
+        old_trial['xp']=600;s['xp']=int(s.get('xp',0))+600
+    return s
+
+
 def view(state):
     if state is None:
         return {'entities':{},'meta':{'joined':False,'actions':[
@@ -69,7 +89,7 @@ def view(state):
             {'label':'以 Rogue 开始冒险','tool':'adventure.join','arguments':{'class_key':'rogue'}},
             {'label':'以 Wizard 开始冒险','tool':'adventure.join','arguments':{'class_key':'wizard'}},
         ]}}
-    s=state;b=s['battle']
+    s=_normalize_state(state);b=s['battle']
     hero=deepcopy(b['actors']['hero'] if b else s['hero'])
     if not b:hero['position']=list(ROOMS[s['room']]['position'])
     entities={'hero':hero}
@@ -193,8 +213,9 @@ def available(s):
                 add('Arcane Recovery：恢复 1 个一环位','arcane_recovery',slot_level=1,count=1)
                 if cap>=2 and spell_slot_capacity(s['level'])['1']-s['spell_slots']['1']>=2:add('Arcane Recovery：恢复 2 个一环位','arcane_recovery',slot_level=1,count=2)
             if cap>=2 and s['spell_slots']['2']<spell_slot_capacity(s['level'])['2']:add('Arcane Recovery：恢复 1 个二环位','arcane_recovery',slot_level=2,count=1)
-        for weapon in s['build'].get('supported_weapons',[]):
-            info=WEAPONS[weapon];add('装备'+info['name'],'equip',weapon=weapon)
+        for weapon in s['build'].get('supported_weapons',s['build'].get('masteries',[])):
+            if weapon in WEAPONS:
+                info=WEAPONS[weapon];add('装备'+info['name'],'equip',weapon=weapon)
         if cls=='wizard':
             prepared=set(s['build'].get('prepared',[]))
             if 'mage_armor' in prepared and s['spell_slots']['1']>0 and not flags.get('mage_armor_until'):add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1)
@@ -370,7 +391,7 @@ def _cast_spell(s,events,args,draw):
 
 
 def apply(state,command,args,draw):
-    s=deepcopy(state);events=[]
+    s=_normalize_state(state);events=[]
     require(args.get('revision')==s['revision'],'StaleAdventureRevision')
     _expire_timed_effects(s)
     pending_level=level_ready(s)
@@ -574,7 +595,8 @@ def apply(state,command,args,draw):
                     features=['spell_slots:4x1+2x2','spell_preparation_capacity:6','evoker:evocation_savant:scorching_ray+shatter','evoker:potent_cantrip']
             emit(events,s,'level_up',before=before_level,after=s['level'],features=features,style=s['build'].get('style'),subclass=s['build'].get('subclass'))
         elif command=='equip':
-            weapon=args['weapon'];require(room=='camp' and weapon in s['build'].get('supported_weapons',[]) and weapon in WEAPONS,'PrepareSupportedGearAtCamp')
+            supported=s['build'].get('supported_weapons',s['build'].get('masteries',[]))
+            weapon=args['weapon'];require(room=='camp' and weapon in supported and weapon in WEAPONS,'PrepareSupportedGearAtCamp')
             info=WEAPONS[weapon]
             s['hero'].update(weapon=weapon,damage_die=info['die'],damage_type=info['type'],mastery=info.get('mastery'),
                              weapon_finesse=bool(info.get('finesse',False)));s['seconds']+=60

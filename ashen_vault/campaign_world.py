@@ -1,5 +1,4 @@
 """Private campaign adapter: no new login protocol, public RPG state, or client RNG."""
-import json
 from hashlib import sha256
 from agent_world import WorldDefinition, FunctionSpec, StateRule, FunctionOutcome, ViewSpec, PresentationCue
 from agent_world.errors import RuleViolation
@@ -9,6 +8,7 @@ from .engine import RulesError
 from .coop import SPECS as PARTY_SPECS, STATE_RULE as PARTY_STATE_RULE, authorize_party_state
 
 UNIVERSE='ashen-vault-ember'
+FUNCTION_VERSION=2
 
 
 def schema(props=None, required=()):
@@ -34,9 +34,12 @@ def cues_for(ctx,events):
 
 
 def join(ctx,args):
-    state=load(ctx)
-    if state is not None:return FunctionOutcome({'scene':view(state),'already_joined':True,'cues':[]})
-    state=new_campaign(ctx.actor_role_id,args.get('class_key','fighter'));ctx.set_state('campaign:'+ctx.actor_role_id,'state',state,expected_version=0)
+    state=load(ctx);requested=args.get('class_key','fighter')
+    if state is not None:
+        existing=state.get('build',{}).get('class_key','fighter')
+        if 'class_key' in args and requested!=existing:raise RuleViolation('ExistingCampaignUsesDifferentClass')
+        return FunctionOutcome({'scene':view(state),'already_joined':True,'cues':[]})
+    state=new_campaign(ctx.actor_role_id,requested);ctx.set_state('campaign:'+ctx.actor_role_id,'state',state,expected_version=0)
     cues=cues_for(ctx,[{'kind':'joined','data':{'origin':'world_rules'},'frame':view(state)}])
     return FunctionOutcome({'scene':view(state),'cues':[c.event(ctx.actor_role_id).payload for c in cues]},tuple(c.event(ctx.actor_role_id) for c in cues))
 
@@ -57,31 +60,16 @@ def look(ctx,args):return FunctionOutcome({'scene':view(load(ctx))})
 def scene(ctx,args):return view(load(ctx))
 def bootstrap(ctx):return {'scene':view(load(ctx)),'rules_scope':'G2 constrained Fighter/Rogue/Wizard 1-3 solo growth plus shared party preview; finite rule menu, not full SRD.'}
 
-def migrate_g2(ctx):
-    rows=ctx.conn.execute("SELECT scope,value_json,version FROM world_state WHERE universe=? AND state_key='state' AND deleted=0 AND substr(scope,1,9)='campaign:'",(ctx.universe,)).fetchall()
-    for row in rows:
-        state=json.loads(row['value_json'])
-        if int(state.get('version',1))>=2:continue
-        state['version']=2;state.setdefault('spell_slots',{'1':0,'2':0});state.setdefault('arcane_recovery',0)
-        build=state.setdefault('build',{});build.setdefault('class_key','fighter');build.setdefault('supported_weapons',['flail','morningstar','mace'])
-        hero=state.setdefault('hero',{});hero.setdefault('class_key','fighter');hero.setdefault('critical_threshold',20);hero.setdefault('remarkable_athlete',False)
-        battle=state.get('battle')
-        if battle and 'hero' in battle.get('actors',{}):
-            bh=battle['actors']['hero'];bh.setdefault('class_key','fighter');bh.setdefault('critical_threshold',20);bh.setdefault('remarkable_athlete',False)
-        reward=state.get('rewards',{}).get('seal_trial')
-        if reward is not None and int(reward.get('xp',0))==0:reward['xp']=600;state['xp']=int(state.get('xp',0))+600
-        ctx.set_state(row['scope'],'state',state,expected_version=int(row['version']))
-
 REV={'type':'integer','minimum':0};TURN={'type':'integer','minimum':1};TEXT={'type':'string','minLength':1,'maxLength':32};BOOL={'type':'boolean'}
 CELL={'type':'array','items':{'type':'integer','minimum':0,'maximum':13},'minItems':2,'maxItems':2}
 CLASS={'type':'string','enum':['fighter','rogue','wizard']}
-SPECS=[FunctionSpec('adventure.join',join,schema({'class_key':CLASS}),description='Initialize your own campaign once with an audited Fighter, Rogue, or Wizard build. The identity already belongs to you; does not create a role or token.'),
-       FunctionSpec('adventure.look',look,schema(),access='read',description='Read your private current scene, available actions, revision and any turn/reaction/check decision.')]
+SPECS=[FunctionSpec('adventure.join',join,schema({'class_key':CLASS}),version=FUNCTION_VERSION,description='Initialize your own campaign once with an audited Fighter, Rogue, or Wizard build. Existing campaigns keep their original class. The identity already belongs to you; does not create a role or token.'),
+       FunctionSpec('adventure.look',look,schema(),access='read',version=FUNCTION_VERSION,description='Read your private current scene, available actions, revision and any turn/reaction/check decision.')]
 
 
 def register(name,props=None,required=(),description=''):
     props={'revision':REV,**(props or {})}
-    SPECS.append(FunctionSpec('adventure.'+name,handler(name),schema(props,('revision',*required)),description=description or 'Submit one intent with current adventure revision. Never supply outcomes; server validates and resolves.'))
+    SPECS.append(FunctionSpec('adventure.'+name,handler(name),schema(props,('revision',*required)),version=FUNCTION_VERSION,description=description or 'Submit one intent with current adventure revision. Never supply outcomes; server validates and resolves.'))
 
 register('travel',{'destination':TEXT},('destination',),'Travel only to a currently offered adjacent region; hidden state is not client-authoritative.')
 register('interact',{'target':TEXT,'use_luck':BOOL},('target',),'Use an interaction offered by look. Rewards are persistent and cannot be collected with new IDs.')
@@ -102,10 +90,13 @@ register('attack',{'turn_id':TURN,'target':TEXT,'knockout':BOOL,'use_luck':BOOL}
 register('react',{'window_id':TEXT,'choice':{'enum':['attack','decline','shield']},'knockout':BOOL,'use_luck':BOOL},('window_id','choice'),'Resolve only the current offered reaction window. Shield is offered only after a qualifying hit roll and spends the Wizard reaction/slot before damage is finalized.')
 SPECS.extend(PARTY_SPECS)
 INITIAL=new_campaign('schema-example')
-STATE=schema({key: {'type': 'integer' if type(value) is int else 'string' if isinstance(value,str) else 'array' if isinstance(value,list) else 'object' if isinstance(value,dict) else 'boolean' if type(value) is bool else ['object','string','null']} for key,value in INITIAL.items()},tuple(INITIAL))
-WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2 preview',tuple(SPECS),version=2,state_version=2,
-    state_rules=(StateRule('campaign:','state',STATE),PARTY_STATE_RULE),migrations={2:migrate_g2},
-    state_authorizer=owned,bootstrap=bootstrap,views=(ViewSpec('adventure',scene,timeline=True),),
+LEGACY_REQUIRED=('version','revision','role_id','room','visited','status','hero','build','level','xp','gold','potions',
+                 'hit_dice','second_wind','action_surge','seconds','last_long_rest_end','rewards','flags','attempts',
+                 'pending_check','battle','battle_serial','short_rest_open','ending')
+STATE=schema({key: {'type': 'integer' if type(value) is int else 'string' if isinstance(value,str) else 'array' if isinstance(value,list) else 'object' if isinstance(value,dict) else 'boolean' if type(value) is bool else ['object','string','null']} for key,value in INITIAL.items()},LEGACY_REQUIRED)
+WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2 preview',tuple(SPECS),version=2,state_version=1,
+    state_rules=(StateRule('campaign:','state',STATE),PARTY_STATE_RULE),
+    state_authorizer=owned,bootstrap=bootstrap,views=(ViewSpec('adventure',scene,timeline=True,version=2),),
     entry_instructions='Use the user-held token for this universe. Read adventure.look, choose one audited class on adventure.join, then use current offered tools/revision. '
     'Fighter/Rogue/Wizard 1-3 constrained solo campaign plus a 1-3 identity shared-state co-op preview; finite rules, not complete SRD. Wizard preparation, components, slots, Blur concentration and Shield hit-reaction continuation are server-authoritative. '
     'Only the user decides their reaction/ability windows; NPCs follow rules with a bounded driver. Reuse operation_id for a retry. '

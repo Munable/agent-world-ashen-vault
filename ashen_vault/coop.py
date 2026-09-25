@@ -1,7 +1,6 @@
 """Bounded shared-state co-op preview for 1-3 independent identities."""
 from copy import deepcopy
 from hashlib import sha256
-import json
 
 from agent_world import FunctionSpec, FunctionOutcome, StateRule
 from agent_world.errors import RuleViolation
@@ -39,19 +38,10 @@ PARTY_STATE=schema({
 def scope_for(party_id):return 'party:'+party_id
 
 
-def _raw_party(ctx, scope):
-    row=ctx.conn.execute(
-        "SELECT value_json,deleted FROM world_state WHERE universe=? AND scope=? AND state_key='state'",
-        (ctx.universe,scope),
-    ).fetchone()
-    if row is None or row['deleted']:return None
-    return json.loads(row['value_json'])
-
-
 def authorize_party_state(ctx,scope,key,access):
     if key!='state' or not scope.startswith('party:'):return False
     if ctx.function_id in ('party.create','party.join'):return True
-    state=_raw_party(ctx,scope)
+    state=ctx.authorization_state(scope,key)
     return state is not None and any(member.get('role_id')==ctx.actor_role_id for member in state['members'].values())
 
 
