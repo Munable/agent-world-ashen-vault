@@ -53,7 +53,7 @@ WIZARD_BUILD = {
     "equipment": ["dagger","dagger","arcane_focus_quarterstaff","robe","spellbook","scholars_pack","travelers_clothes"],
     "cantrips": ["light","mage_hand","ray_of_frost"],
     "spellbook": ["detect_magic","feather_fall","mage_armor","magic_missile","sleep","thunderwave"],
-    "prepared": ["mage_armor","magic_missile","sleep","thunderwave"],
+    "prepared": ["mage_armor","magic_missile"],
     "implemented_spells": ["mage_armor","magic_missile","ray_of_frost"],
     "campaign_purse_source": "本序章统一远征金 68 GP；不冒充 Wizard 初始装备余款",
     "starting_potion_source": "营地委托方提供一瓶",
@@ -104,3 +104,16 @@ def spell_slot_capacity(level: int) -> dict[str, int]:
     if level == 2:
         return {"1": 3, "2": 0}
     return {"1": 4, "2": 2}
+
+SPELLS = {
+    "mage_armor": {"level": 1, "components": ["v", "s", "m"], "material_focus": True, "concentration": False},
+    "magic_missile": {"level": 1, "components": ["v", "s"], "concentration": False},
+    "shield": {"level": 1, "components": ["v", "s"], "concentration": False, "reaction": True},
+    "ray_of_frost": {"level": 0, "components": ["v", "s"], "concentration": False},
+    "blur": {"level": 2, "components": ["v"], "concentration": True},
+    "scorching_ray": {"level": 2, "components": ["v", "s"], "concentration": False},
+}
+
+def prepared_capacity(level: int) -> int:
+    return {1: 4, 2: 5, 3: 6}.get(level, 6)
+

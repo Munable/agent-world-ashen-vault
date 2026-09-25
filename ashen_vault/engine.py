@@ -2,7 +2,7 @@
 from __future__ import annotations
 from copy import deepcopy
 from .content import ARENA
-from .rules import Draw, d20, incapacitated, melee_attack
+from .rules import Draw, d20, incapacitated, melee_attack, melee_attack_test, resolve_melee_attack, end_concentration
 
 
 class RulesError(ValueError):
@@ -32,6 +32,9 @@ def clear_step(a: list[int], b: list[int]) -> bool:
 
 def _turn_start(state: dict) -> None:
     actor = state['actors'][active(state)]
+    shield_bonus=int(actor.pop('shield_ac_bonus',0))
+    if shield_bonus:actor['ac']-=shield_bonus
+    if actor.get('concentration') and state['round']>=int(actor.get('concentration_expires_round',10**9)):end_concentration(actor)
     for other in state['actors'].values():
         if other.get('sapped_by') == actor['id']:
             other.pop('sapped_by', None)
@@ -123,6 +126,20 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
         pending = state['pending']
         require(pending is not None and args.get('window_id') == pending['window_id'], 'StaleReactionWindow')
         require(actor_id == pending['reactor'], 'NotYourReaction')
+        if pending.get('kind') == 'shield':
+            require(args.get('choice') in ('shield','decline'), 'UnsupportedReaction')
+            require(not incapacitated(actor), 'ReactionUnavailable')
+            attacker=state['actors'][pending['attacker']];test=deepcopy(pending['attack_test'])
+            result={'choice':args['choice'],'reactor':actor_id,'attacker':pending['attacker'],'target':actor_id,'window_id':pending['window_id']}
+            if args['choice']=='shield':
+                require(actor['reaction'] and actor.get('shield_reaction_available') and actor.get('shield_slots',0)>0,'ShieldUnavailable')
+                actor['reaction']=False;actor['shield_slots']-=1
+                if not actor.get('shield_ac_bonus'):actor['shield_ac_bonus']=5;actor['ac']+=5
+                result['shield']={'ac':actor['ac'],'remaining_slots':actor['shield_slots']}
+            test['success']=test['natural']==20 or (test['natural']!=1 and test['total']>=actor['ac'])
+            result['attack_result']=resolve_melee_attack(attacker,actor,draw,test,knockout=pending.get('knockout',False),
+                turn_marker=pending.get('turn_marker'),ally_support=bool(pending.get('ally_support',False)))
+            state['pending']=None;_finish(state);return state,result
         require(args.get('choice') in ('attack', 'decline'), 'UnsupportedReaction')
         require(actor['reaction'] and not incapacitated(actor), 'ReactionUnavailable')
         mover = state['actors'][pending['mover']]
@@ -130,17 +147,13 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
         if args['choice'] == 'attack':
             actor['reaction'] = False
             support = any(other['id'] not in (actor_id, mover['id']) and other['team'] == actor['team']
-                          and not incapacitated(other) and adjacent(other['position'], mover['position'])
-                          for other in state['actors'].values())
+                          and not incapacitated(other) and adjacent(other['position'], mover['position']) for other in state['actors'].values())
             result['attack_result'] = melee_attack(actor, mover, draw, knockout=args.get('knockout', False),
-                                                   use_luck=args.get('use_luck', True),
-                                                   turn_marker=state['turn_id'], ally_support=support)
+                                                   use_luck=args.get('use_luck', True),turn_marker=state['turn_id'], ally_support=support)
         _finish(state)
         if state['phase'] == 'complete' or incapacitated(mover):
-            state['pending'] = None
-            result['movement'] = {'status': 'interrupted', 'position': mover['position']}
-        else:
-            result['movement'] = _advance_movement(state, pending['mover'], pending['path'], pending['waived'] + [actor_id])
+            state['pending'] = None;result['movement'] = {'status': 'interrupted', 'position': mover['position']}
+        else:result['movement'] = _advance_movement(state, pending['mover'], pending['path'], pending['waived'] + [actor_id])
         return state, result
     require(state['pending'] is None, 'ReactionPending: resolve the visible window before continuing')
     require(active(state) == actor_id, 'NotYourTurn')
@@ -184,10 +197,17 @@ def apply(state: dict, actor_id: str, command: str, args: dict, draw: Draw) -> t
         support = any(other['id'] not in (actor_id, target_id) and other['team'] == actor['team']
                       and not incapacitated(other) and adjacent(other['position'], target['position'])
                       for other in state['actors'].values())
-        result = {'actor': actor_id, 'target': target_id, **melee_attack(
-            actor, target, draw, knockout=args.get('knockout', False), use_luck=args.get('use_luck', True),
-            turn_marker=state['turn_id'], ally_support=support)}
-        _finish(state)
+        test=melee_attack_test(actor,target,draw,use_luck=args.get('use_luck',True))
+        if (test['success'] and target.get('shield_reaction_available') and target.get('shield_slots',0)>0 and target.get('reaction') and not incapacitated(target)):
+            state['window_serial']+=1;window=f"shield-{state['turn_id']}-{state['window_serial']}"
+            state['pending']={'kind':'shield','window_id':window,'reactor':target_id,'attacker':actor_id,'attack_test':test,
+                              'knockout':args.get('knockout',False),'turn_marker':state['turn_id'],'ally_support':support}
+            result={'actor':actor_id,'target':target_id,'status':'awaiting_reaction','window_id':window,'reactor':target_id,
+                    'attack':test,'hit':True,'critical':test['critical'],'damage':0,'damage_dice':[]}
+        else:
+            result={'actor':actor_id,'target':target_id,**resolve_melee_attack(actor,target,draw,test,
+                knockout=args.get('knockout',False),turn_marker=state['turn_id'],ally_support=support)}
+            _finish(state)
     elif command == 'dash':
         actor['movement'] += actor['speed']
         result = {'extra_movement': actor['speed']}

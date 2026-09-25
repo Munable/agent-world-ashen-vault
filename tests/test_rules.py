@@ -189,3 +189,11 @@ class RulesTests(unittest.TestCase):
         second=rules.melee_attack(attacker,target,dice(15,14,2),turn_marker=7,ally_support=True)
         self.assertNotIn('sneak_attack',second)
 
+    def test_blur_imposes_disadvantage_and_damage_can_break_concentration(self):
+        attacker,target=combatant('warden'),combatant('sentinel');target['position']=[4,2]
+        target.update(blurred=True,concentration='blur',concentration_save_bonus=2)
+        result=rules.melee_attack(attacker,target,dice(20,18,4,2))
+        self.assertEqual(result['attack']['mode'],'disadvantage')
+        self.assertIn('concentration_save',result);self.assertFalse(result['concentration_save']['success'])
+        self.assertNotIn('concentration',target);self.assertNotIn('blurred',target)
+

@@ -398,3 +398,53 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(RulesError,'UnsupportedSpell'):
             command(s,'cast',spell='sleep',target='enemy',slot_level=1)
 
+    def wizard_level3(self):
+        s=new_campaign('wizard','wizard');s['xp']=300;s,_=command(s,'level_up');s['xp']=900;s,_=command(s,'level_up')
+        return s
+
+    def test_wizard_preparation_components_and_shield_reaction_are_authoritative(self):
+        from ashen_vault.campaign import advance_npc
+        from ashen_vault.campaign_content import make_battle
+        s=new_campaign('wizard','wizard');broken=deepcopy(s);broken['build']['equipment'].remove('arcane_focus_quarterstaff')
+        with self.assertRaisesRegex(RulesError,'SpellComponentUnavailable'):command(broken,'cast',spell='mage_armor',target='hero',slot_level=1)
+        s['xp']=300;s,_=command(s,'level_up');s,_=command(s,'rest',kind='long')
+        s,_=command(s,'prepare_spell',spell='shield',prepared=True)
+        self.assertIn('shield',s['build']['prepared'])
+        s['room']='shrine';s['flags'].update(delivered=True,dread_cleared=True,guard_access=True)
+        s['battle']=make_battle(s,dice(2,18));b=s['battle'];b['order']=['enemy','hero'];b['index']=0;b['round']=1;b['turn_id']=1
+        b['actors']['enemy'].update(position=[4,2],action=True,movement=30);b['actors']['hero']['position']=[3,2]
+        hp=b['actors']['hero']['hp'];events=[];advance_npc(s,events,dice(14))
+        self.assertEqual(s['battle']['pending']['kind'],'shield')
+        self.assertTrue(any(a['arguments'].get('choice')=='shield' for a in available(s)))
+        window=s['battle']['pending']['window_id'];s,_=command(s,'react',dice(),window_id=window,choice='shield')
+        self.assertEqual(s['hero']['hp'],hp);self.assertEqual(s['spell_slots']['1'],2)
+
+    def test_thief_fast_hands_is_a_real_bonus_action_object_use(self):
+        from ashen_vault.campaign_content import make_battle
+        s=new_campaign('rogue','rogue');s['xp']=300;s,_=command(s,'level_up');s['xp']=900;s,_=command(s,'level_up')
+        self.assertEqual((s['hero']['climb_speed'],s['hero']['jump_ability']),(30,'dex'))
+        s['flags']['delivered']=True;s['room']='shrine';s['battle']=make_battle(s,dice(2,18))
+        b=s['battle'];b['order']=['hero','enemy'];b['index']=0;b['round']=1;b['turn_id']=1;b['actors']['hero']['movement']=30
+        s,events=command(s,'fast_hands',choice='trial_winch',turn_id=1)
+        self.assertFalse(s['battle']['actors']['hero']['bonus_action']);self.assertEqual(s['battle']['actors']['enemy']['speed_penalty'],10)
+        self.assertTrue(s['flags']['trial_winch_used'])
+
+    def test_evoker_prepares_and_casts_scorching_ray_with_real_second_level_slot(self):
+        from ashen_vault.campaign_content import make_battle
+        s=self.wizard_level3();s,_=command(s,'rest',kind='long');s,_=command(s,'prepare_spell',spell='scorching_ray',prepared=True)
+        s['room']='shrine';s['battle']=make_battle(s,dice(2,18));b=s['battle'];b['order']=['hero','enemy'];b['index']=0;b['round']=1;b['turn_id']=1
+        b['actors']['hero']['movement']=30;b['actors']['enemy'].update(position=[8,2],hp=99,max_hp=99)
+        before=s['spell_slots']['2'];s,events=command(s,'cast',dice(15,3,4,16,2,5,17,1,6),spell='scorching_ray',target='enemy',slot_level=2,turn_id=1,use_luck=False)
+        result=next(e for e in events if e['kind']=='spell')['data']['result']
+        self.assertEqual((len(result['rays']),result['damage'],s['spell_slots']['2']),(3,21,before-1))
+        self.assertIn('scorching_ray',s['build']['spellbook'])
+
+    def test_evoker_potent_cantrip_deals_half_damage_on_a_miss_without_slow(self):
+        from ashen_vault.campaign_content import make_battle
+        s=self.wizard_level3();s['room']='shrine';s['battle']=make_battle(s,dice(2,18));b=s['battle'];b['order']=['hero','enemy'];b['index']=0;b['round']=1;b['turn_id']=1
+        b['actors']['hero']['movement']=30;b['actors']['enemy'].update(position=[8,2],hp=99,max_hp=99)
+        s,events=command(s,'cast',dice(2,7),spell='ray_of_frost',target='enemy',turn_id=1,use_luck=False)
+        result=next(e for e in events if e['kind']=='spell')['data']['result']
+        self.assertFalse(result['hit']);self.assertEqual(result['damage'],3);self.assertTrue(result['potent_cantrip'])
+        self.assertNotIn('speed_penalty',s['battle']['actors']['enemy'])
+

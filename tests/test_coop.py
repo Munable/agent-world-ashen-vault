@@ -47,6 +47,21 @@ class CoopTests(unittest.TestCase):
         self.assertEqual(state['rewards']['coop_guard']['beneficiaries'],['p1','p2'])
         self.assertEqual((state['members']['p1']['xp'],state['members']['p2']['gold']),(50,5))
 
+    def test_conflicting_rest_requests_do_not_advance_shared_time(self):
+        from ashen_vault.coop import rest_request, rest_cancel
+        state=self.state();state['phase']='complete'
+        class Ctx:
+            def __init__(self,role):self.actor_role_id=role
+            def get_state(self,scope,key):return deepcopy(state)
+            def set_state(self,scope,key,value):state.clear();state.update(deepcopy(value))
+        a,b=Ctx('role-a'),Ctx('role-b')
+        self.assertFalse(rest_request(a,{'party_id':state['party_id'],'kind':'short'}).result['rest_completed'])
+        self.assertFalse(rest_request(b,{'party_id':state['party_id'],'kind':'long'}).result['rest_completed'])
+        self.assertEqual(state['seconds'],0);self.assertEqual(state['rest_requests'],{'p1':'short','p2':'long'})
+        rest_cancel(b,{'party_id':state['party_id']})
+        result=rest_request(b,{'party_id':state['party_id'],'kind':'short'})
+        self.assertTrue(result.result['rest_completed']);self.assertEqual(state['seconds'],3600);self.assertEqual(state['rest_requests'],{})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,10 +2,10 @@
 from copy import deepcopy
 from math import ceil
 from .campaign_content import ROOMS, WEAPONS, REWARDS, make_battle
-from .characters import hp_gain, spell_slot_capacity
+from .characters import hp_gain, spell_slot_capacity, prepared_capacity, SPELLS
 from .content import ARENA
 from .engine import apply as battle_apply, active, adjacent, clear_step, RulesError, require
-from .rules import d20, heal, incapacitated, roll, lose_hp, damage_amount
+from .rules import d20, heal, incapacitated, roll, lose_hp, damage_amount, end_concentration
 
 
 def path_to(battle, actor_id, destination=None):
@@ -122,8 +122,14 @@ def available(s):
     if b:
         if b['pending']:
             if b['pending']['reactor']=='hero':
-                add('机会攻击','react',window_id=b['pending']['window_id'],choice='attack',knockout=False)
-                add('放弃反应','react',window_id=b['pending']['window_id'],choice='decline')
+                if b['pending'].get('kind')=='shield':
+                    h=b['actors']['hero']
+                    if cls=='wizard' and 'shield' in s['build'].get('prepared',[]) and h.get('shield_slots',0)>0 and h.get('reaction'):
+                        add('施放 Shield（反应）','react',window_id=b['pending']['window_id'],choice='shield')
+                    add('不施放 Shield','react',window_id=b['pending']['window_id'],choice='decline')
+                else:
+                    add('机会攻击','react',window_id=b['pending']['window_id'],choice='attack',knockout=False)
+                    add('放弃反应','react',window_id=b['pending']['window_id'],choice='decline')
             return actions
         if active(b)!='hero':return actions
         h=b['actors']['hero'];tid=b['turn_id']
@@ -133,11 +139,13 @@ def available(s):
         if h['action']:
             for name,label in (('dodge','闪避'),('disengage','撤离'),('dash','冲刺')):add(label,name,turn_id=tid)
             if cls=='wizard':
+                prepared=set(s['build'].get('prepared',[]))
                 add('施放 Ray of Frost','cast',spell='ray_of_frost',target='enemy',turn_id=tid)
-                if s['spell_slots']['1']>0:add('施放 Magic Missile（1环）','cast',spell='magic_missile',target='enemy',slot_level=1,turn_id=tid)
-                if s['spell_slots']['2']>0:add('施放 Magic Missile（2环）','cast',spell='magic_missile',target='enemy',slot_level=2,turn_id=tid)
-                if s['spell_slots']['1']>0 and not s['flags'].get('mage_armor_until'):
-                    add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1,turn_id=tid)
+                if 'magic_missile' in prepared and s['spell_slots']['1']>0:add('施放 Magic Missile（1环）','cast',spell='magic_missile',target='enemy',slot_level=1,turn_id=tid)
+                if 'magic_missile' in prepared and s['spell_slots']['2']>0:add('施放 Magic Missile（2环）','cast',spell='magic_missile',target='enemy',slot_level=2,turn_id=tid)
+                if 'mage_armor' in prepared and s['spell_slots']['1']>0 and not s['flags'].get('mage_armor_until'):add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1,turn_id=tid)
+                if 'blur' in prepared and s['spell_slots']['2']>0 and not h.get('concentration'):add('施放 Blur（专注）','cast',spell='blur',target='hero',slot_level=2,turn_id=tid)
+                if 'scorching_ray' in prepared and s['spell_slots']['2']>0:add('施放 Scorching Ray','cast',spell='scorching_ray',target='enemy',slot_level=2,turn_id=tid)
         if h['movement']>0:
             if path_to(b,'hero'):add('靠近敌人','approach',turn_id=tid)
             if h['position'][0]>0 and path_to(b,'hero',[0,h['position'][1]]):add('向出口移动','withdraw',turn_id=tid)
@@ -150,6 +158,8 @@ def available(s):
                 add('灵巧动作：撤离','cunning_action',choice='disengage',turn_id=tid)
             if cls=='rogue' and s['level']>=3 and not h.get('moved_this_turn'):
                 add('Steady Aim','steady_aim',turn_id=tid)
+            if cls=='rogue' and s['level']>=3 and s['flags'].get('delivered') and not s['flags'].get('trial_winch_used'):
+                add('Fast Hands：扳动守印绞盘','fast_hands',choice='trial_winch',turn_id=tid)
         if cls=='fighter' and s['level']>=2 and s['action_surge']>0:add('动作如潮：额外动作','action_surge')
         if h['position'][0]==0:add('离开遭遇','escape',turn_id=tid)
         add('结束回合','end_turn',turn_id=tid);return actions
@@ -181,14 +191,19 @@ def available(s):
             cap=ceil(s['level']/2)
             if s['spell_slots']['1']<spell_slot_capacity(s['level'])['1']:
                 add('Arcane Recovery：恢复 1 个一环位','arcane_recovery',slot_level=1,count=1)
-                if cap>=2 and spell_slot_capacity(s['level'])['1']-s['spell_slots']['1']>=2:
-                    add('Arcane Recovery：恢复 2 个一环位','arcane_recovery',slot_level=1,count=2)
-            if cap>=2 and s['spell_slots']['2']<spell_slot_capacity(s['level'])['2']:
-                add('Arcane Recovery：恢复 1 个二环位','arcane_recovery',slot_level=2,count=1)
+                if cap>=2 and spell_slot_capacity(s['level'])['1']-s['spell_slots']['1']>=2:add('Arcane Recovery：恢复 2 个一环位','arcane_recovery',slot_level=1,count=2)
+            if cap>=2 and s['spell_slots']['2']<spell_slot_capacity(s['level'])['2']:add('Arcane Recovery：恢复 1 个二环位','arcane_recovery',slot_level=2,count=1)
         for weapon in s['build'].get('supported_weapons',[]):
             info=WEAPONS[weapon];add('装备'+info['name'],'equip',weapon=weapon)
-        if cls=='wizard' and s['spell_slots']['1']>0 and not flags.get('mage_armor_until'):
-            add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1)
+        if cls=='wizard':
+            prepared=set(s['build'].get('prepared',[]))
+            if 'mage_armor' in prepared and s['spell_slots']['1']>0 and not flags.get('mage_armor_until'):add('施放 Mage Armor','cast',spell='mage_armor',target='hero',slot_level=1)
+            if flags.get('spell_preparation_open'):
+                cap=prepared_capacity(s['level']);implemented=set(s['build'].get('implemented_spells',[]))
+                for spell in sorted(set(s['build'].get('spellbook',[])) & implemented):
+                    if SPELLS.get(spell,{}).get('level',0)==0:continue
+                    if spell in prepared:add('取消准备 '+spell,'prepare_spell',spell=spell,prepared=False)
+                    elif len(prepared)<cap:add('准备 '+spell,'prepare_spell',spell=spell,prepared=True)
         if s['gold']>=50 and flags.get('potions_bought',0)<2:add('购买治疗药水（50 金币）','buy_potion')
         add('结束本次远征','retire')
     if 'prone' in s['hero']['conditions']:add('在安全位置起身','recover_posture')
@@ -213,6 +228,7 @@ def reward(s,events,source,resolution):
 def record_battle(s,events,actor,command,args,draw):
     before=deepcopy(s['battle']);updated,result=battle_apply(before,actor,command,args,draw)
     s['battle']=updated;s['hero']=deepcopy(updated['actors']['hero'])
+    if class_key(s)=='wizard':s['spell_slots']['1']=s['hero'].get('shield_slots',s['spell_slots']['1'])
     if updated['round'] > before['round']:s['seconds']+=6
     emit(events,s,'combat',actor=actor,origin='player' if actor=='hero' else 'scripted_npc',command=command,result=result,
          before={k:{'hp':v['hp'],'position':v['position'],'conditions':v['conditions']} for k,v in before['actors'].items()},
@@ -224,7 +240,13 @@ def record_battle(s,events,actor,command,args,draw):
 def settle_battle(s,events):
     b=s['battle']
     if not b or b['phase']!='complete':return
-    s['hero']=deepcopy(b['actors']['hero']);winner=b['winner'];s['battle']=None
+    s['hero']=deepcopy(b['actors']['hero']);winner=b['winner']
+    if class_key(s)=='wizard':
+        s['spell_slots']['1']=s['hero'].get('shield_slots',s['spell_slots']['1'])
+        bonus=int(s['hero'].pop('shield_ac_bonus',0))
+        if bonus:s['hero']['ac']-=bonus
+        end_concentration(s['hero'])
+    s['battle']=None
     if winner!='hero':
         s['status']='captured';s['ending']='旅人被击昏并拘留。角色仍是原角色；本次远征失败，没有自动复活或重新领奖。'
         emit(events,s,'ending',outcome='captured');return
@@ -289,66 +311,62 @@ def checked_outcome(s,events,kind,success,draw):
 def _cast_spell(s,events,args,draw):
     require(class_key(s)=='wizard','WizardSpellcastingRequired')
     spell=args.get('spell');require(spell in s['build'].get('implemented_spells',[]),'UnsupportedSpell')
+    spec=SPELLS[spell];require(not spec.get('reaction'),'ReactionSpellUsesReactionWindow')
+    if spec['level']>0:require(spell in s['build'].get('prepared',[]),'SpellNotPrepared')
+    if spec.get('material_focus'):require('arcane_focus_quarterstaff' in s['build'].get('equipment',[]),'SpellComponentUnavailable')
     b=s['battle'];h=b['actors']['hero'] if b else s['hero']
     if b:
         require(active(b)=='hero' and not b['pending'],'NotYourTurnOrReactionPending')
-        require(args.get('turn_id')==b['turn_id'],'StaleTurn')
-        require(h['action'],'ActionSpent')
+        require(args.get('turn_id')==b['turn_id'],'StaleTurn');require(h['action'],'ActionSpent')
+    result={'spell':spell,'components':list(spec.get('components',[]))}
     if spell=='ray_of_frost':
-        require(b is not None,'CombatTargetRequired')
-        target=b['actors'].get(args.get('target'));require(target is not None and target['team']!='hero','InvalidTarget')
-        distance=_distance_feet(h['position'],target['position'])
-        require(distance<=60 and _clear_spell_path(h['position'],target['position']),'SpellTargetOutOfRangeOrCovered')
-        close=distance<=5
-        advantage='prone' in target['conditions'] and close
-        disadvantage=(('prone' in target['conditions'] and not close) or
-                     (close and not incapacitated(target)) or
-                     (target.get('dodge',False) and not incapacitated(target) and target['speed']>0))
-        test=d20(draw,h['spell_attack_bonus'],advantage=advantage,disadvantage=disadvantage,
-                 dc=target['ac'],attack=True,reroll_one=h.get('lucky',False) and args.get('use_luck',True))
-        raw_roll=roll(draw,8)[0] if test['success'] or (s['level']>=3 and h.get('potent_cantrip')) else 0
-        raw=raw_roll if test['success'] else raw_roll//2
-        damage=damage_amount(raw,resistant='cold' in target.get('resistances',[]),
-                             vulnerable='cold' in target.get('vulnerabilities',[]),immune='cold' in target.get('immunities',[]))
+        require(b is not None,'CombatTargetRequired');target=b['actors'].get(args.get('target'));require(target is not None and target['team']!='hero','InvalidTarget')
+        distance=_distance_feet(h['position'],target['position']);require(distance<=60 and _clear_spell_path(h['position'],target['position']),'SpellTargetOutOfRangeOrCovered')
+        close=distance<=5;advantage='prone' in target['conditions'] and close
+        disadvantage=(('prone' in target['conditions'] and not close) or (close and not incapacitated(target)) or (target.get('dodge',False) and not incapacitated(target) and target['speed']>0))
+        test=d20(draw,h['spell_attack_bonus'],advantage=advantage,disadvantage=disadvantage,dc=target['ac'],attack=True,reroll_one=h.get('lucky',False) and args.get('use_luck',True))
+        raw_roll=roll(draw,8)[0] if test['success'] or h.get('potent_cantrip') else 0;raw=raw_roll if test['success'] else raw_roll//2
+        damage=damage_amount(raw,resistant='cold' in target.get('resistances',[]),vulnerable='cold' in target.get('vulnerabilities',[]),immune='cold' in target.get('immunities',[]))
         effect=lose_hp(target,damage) if damage else {'hp_before':target['hp'],'hp_after':target['hp'],'temporary_absorbed':0}
-        if test['success'] and not target.get('dead'):
-            target['speed_penalty']=max(int(target.get('speed_penalty',0)),10);target['slowed_by']='hero'
-        result={'spell':spell,'attack':test,'hit':test['success'],'damage_roll':raw_roll,'damage':damage,'damage_type':'cold',
-                'potent_cantrip':bool(not test['success'] and raw_roll),'effect':effect}
-        h['action']=False
+        if test['success'] and not target.get('dead'):target['speed_penalty']=max(int(target.get('speed_penalty',0)),10);target['slowed_by']='hero'
+        result.update(target='enemy',attack=test,hit=test['success'],damage_roll=raw_roll,damage=damage,damage_type='cold',potent_cantrip=bool(not test['success'] and raw_roll),effect=effect);h['action']=False
     else:
-        slot=int(args.get('slot_level',1));require(slot in (1,2),'UnsupportedSpellSlot')
-        require(s['spell_slots'].get(str(slot),0)>0,'SpellSlotEmpty')
+        slot=int(args.get('slot_level',spec['level']));require(slot in (1,2) and slot>=spec['level'],'UnsupportedSpellSlot');require(s['spell_slots'].get(str(slot),0)>0,'SpellSlotEmpty')
         if spell=='mage_armor':
-            require(slot==1,'MageArmorUsesLevelOneSlot')
-            s['spell_slots']['1']-=1
-            dex=(s['build']['abilities']['dex']-10)//2
-            h['ac']=13+dex;s['flags']['mage_armor_until']=s['seconds']+28800
-            result={'spell':spell,'slot_level':1,'target':'hero','ac':h['ac'],'expires_at_seconds':s['flags']['mage_armor_until']}
+            s['spell_slots'][str(slot)]-=1;dex=(s['build']['abilities']['dex']-10)//2;h['ac']=13+dex;s['flags']['mage_armor_until']=s['seconds']+28800
+            result.update(slot_level=slot,target='hero',ac=h['ac'],expires_at_seconds=s['flags']['mage_armor_until'])
             if b:h['action']=False
             else:s['seconds']+=6
-        else:
-            require(spell=='magic_missile' and b is not None,'CombatTargetRequired')
-            target=b['actors'].get(args.get('target'));require(target is not None and target['team']!='hero','InvalidTarget')
-            require(_distance_feet(h['position'],target['position'])<=120 and _clear_spell_path(h['position'],target['position']),
-                    'SpellTargetOutOfRangeOrCovered')
-            s['spell_slots'][str(slot)]-=1
-            darts=2+slot;dice=roll(draw,4,darts);raw=sum(value+1 for value in dice)
-            damage=damage_amount(raw,resistant='force' in target.get('resistances',[]),
-                                 vulnerable='force' in target.get('vulnerabilities',[]),immune='force' in target.get('immunities',[]))
-            effect=lose_hp(target,damage)
-            h['action']=False
-            result={'spell':spell,'slot_level':slot,'darts':darts,'dice':dice,'damage':damage,'damage_type':'force','effect':effect}
+        elif spell=='blur':
+            require(b is not None and slot==2,'CombatTargetRequired');s['spell_slots']['2']-=1;end_concentration(h)
+            h['concentration']='blur';h['blurred']=True;h['concentration_expires_round']=b['round']+10;h['concentration_save_bonus']=s['build']['saves']['con'];h['action']=False
+            result.update(slot_level=2,target='hero',concentration='blur',expires_round=h['concentration_expires_round'])
+        elif spell=='magic_missile':
+            require(b is not None,'CombatTargetRequired');target=b['actors'].get(args.get('target'));require(target is not None and target['team']!='hero','InvalidTarget')
+            require(_distance_feet(h['position'],target['position'])<=120 and _clear_spell_path(h['position'],target['position']),'SpellTargetOutOfRangeOrCovered')
+            s['spell_slots'][str(slot)]-=1;darts=2+slot;dice=roll(draw,4,darts);raw=sum(value+1 for value in dice)
+            damage=damage_amount(raw,resistant='force' in target.get('resistances',[]),vulnerable='force' in target.get('vulnerabilities',[]),immune='force' in target.get('immunities',[]));effect=lose_hp(target,damage);h['action']=False
+            result.update(slot_level=slot,target='enemy',darts=darts,dice=dice,damage=damage,damage_type='force',effect=effect)
+        elif spell=='scorching_ray':
+            require(b is not None and slot==2,'CombatTargetRequired');target=b['actors'].get(args.get('target'));require(target is not None and target['team']!='hero','InvalidTarget')
+            distance=_distance_feet(h['position'],target['position']);require(distance<=120 and _clear_spell_path(h['position'],target['position']),'SpellTargetOutOfRangeOrCovered')
+            s['spell_slots']['2']-=1;rays=[];total=0
+            for _ in range(3):
+                close=distance<=5;advantage='prone' in target['conditions'] and close
+                disadvantage=(('prone' in target['conditions'] and not close) or (close and not incapacitated(target)) or (target.get('dodge',False) and not incapacitated(target) and target['speed']>0))
+                test=d20(draw,h['spell_attack_bonus'],advantage=advantage,disadvantage=disadvantage,dc=target['ac'],attack=True,reroll_one=h.get('lucky',False) and args.get('use_luck',True))
+                dice=roll(draw,6,4 if test['critical'] else 2) if test['success'] else [];raw=sum(dice)
+                damage=damage_amount(raw,resistant='fire' in target.get('resistances',[]),vulnerable='fire' in target.get('vulnerabilities',[]),immune='fire' in target.get('immunities',[]))
+                effect=lose_hp(target,damage) if damage else {'hp_before':target['hp'],'hp_after':target['hp'],'temporary_absorbed':0}
+                total+=damage;rays.append({'attack':test,'hit':test['success'],'dice':dice,'damage':damage,'effect':effect})
+            h['action']=False;result.update(slot_level=2,target='enemy',rays=rays,damage=total,damage_type='fire')
+        else:raise RulesError('UnsupportedSpell')
     if b:
-        s['hero']=deepcopy(h)
-        target=b['actors'].get('enemy')
-        if target is not None and incapacitated(target):
-            b.update(phase='complete',winner='hero',pending=None)
-        emit(events,s,'spell',actor='hero',origin='player',result=result)
-        settle_battle(s,events)
+        h['shield_slots']=s['spell_slots']['1'];s['hero']=deepcopy(h);target=b['actors'].get('enemy')
+        if target is not None and incapacitated(target):b.update(phase='complete',winner='hero',pending=None)
+        emit(events,s,'spell',actor='hero',origin='player',result=result);settle_battle(s,events)
         if s['battle'] is not None:advance_npc(s,events,draw)
-    else:
-        s['hero']=deepcopy(h);emit(events,s,'spell',actor='hero',origin='player',result=result)
+    else:s['hero']=deepcopy(h);emit(events,s,'spell',actor='hero',origin='player',result=result)
 
 
 def apply(state,command,args,draw):
@@ -360,6 +378,7 @@ def apply(state,command,args,draw):
     require(not pending_level or command=='level_up','LevelChoicePending')
     require(not s['pending_check'] or command=='resolve_check','AbilityDecisionPending')
     if command not in ('spend_hit_die','rest','arcane_recovery'):s['short_rest_open']=False
+    if command not in ('prepare_spell','rest'):s['flags'].pop('spell_preparation_open',None)
     cls=class_key(s)
     battle_commands={'attack','move','approach','withdraw','escape','dash','dodge','disengage','drop_prone','stand','end_turn','react'}
     if command in battle_commands:
@@ -397,6 +416,14 @@ def apply(state,command,args,draw):
         h=b['actors']['hero'];require(h.get('bonus_action'),'BonusActionSpent');require(not h.get('moved_this_turn'),'AlreadyMovedThisTurn')
         h['bonus_action']=False;h['movement']=0;h['steady_aim']=True;s['hero']=deepcopy(h)
         emit(events,s,'ability',ability='steady_aim',speed=0)
+    elif command=='fast_hands':
+        b=s['battle'];require(b is not None and cls=='rogue' and s['level']>=3,'FastHandsUnavailable')
+        require(active(b)=='hero' and not b['pending'] and args.get('turn_id')==b['turn_id'],'NotYourTurnOrReactionPending')
+        h=b['actors']['hero'];require(h.get('bonus_action'),'BonusActionSpent')
+        require(args.get('choice')=='trial_winch' and s['flags'].get('delivered') and not s['flags'].get('trial_winch_used'),'FastHandsObjectUnavailable')
+        enemy=b['actors']['enemy'];h['bonus_action']=False;s['flags']['trial_winch_used']=True
+        enemy['speed_penalty']=max(int(enemy.get('speed_penalty',0)),10);enemy['slowed_by']='hero';s['hero']=deepcopy(h)
+        emit(events,s,'ability',ability='fast_hands',object='trial_winch',effect='enemy_speed_minus_10_until_hero_next_turn')
     elif command in ('second_wind','potion','action_surge'):
         b=s['battle'];h=b['actors']['hero'] if b else s['hero']
         require(not incapacitated(h),'Incapacitated')
@@ -529,19 +556,22 @@ def apply(state,command,args,draw):
                     s['build']['skill_sources']['scholar_expertise']=['arcana']
                     for name in ('shield','grease'):
                         if name not in s['build']['spellbook']:s['build']['spellbook'].append(name)
-                    features=['scholar:arcana_expertise','spell_slots:3x1']
+                    if 'shield' not in s['build']['implemented_spells']:s['build']['implemented_spells'].append('shield')
+                    features=['scholar:arcana_expertise','spell_slots:3x1','spell_preparation_capacity:5']
             else:
                 if cls=='fighter':
                     s['hero']['critical_threshold']=19;s['hero']['initiative_advantage']=True;s['hero']['remarkable_athlete']=True
                     s['build']['subclass']='Champion';features=['improved_critical','remarkable_athlete']
                 elif cls=='rogue':
-                    s['hero']['sneak_attack_dice']=2;s['hero']['fast_hands']=True;s['build']['subclass']='Thief'
+                    s['hero']['sneak_attack_dice']=2;s['hero']['fast_hands']=True;s['hero']['climb_speed']=s['hero']['speed'];s['hero']['jump_ability']='dex';s['build']['subclass']='Thief'
                     features=['sneak_attack:2d6','steady_aim','thief:fast_hands','thief:second_story_work']
                 else:
                     s['spell_slots']=spell_slot_capacity(3);s['hero']['potent_cantrip']=True;s['build']['subclass']='Evoker'
-                    for name in ('misty_step','web','scorching_ray','shatter'):
+                    for name in ('blur','misty_step','scorching_ray','shatter'):
                         if name not in s['build']['spellbook']:s['build']['spellbook'].append(name)
-                    features=['spell_slots:4x1+2x2','evoker:evocation_savant','evoker:potent_cantrip']
+                    for name in ('blur','scorching_ray'):
+                        if name not in s['build']['implemented_spells']:s['build']['implemented_spells'].append(name)
+                    features=['spell_slots:4x1+2x2','spell_preparation_capacity:6','evoker:evocation_savant:scorching_ray+shatter','evoker:potent_cantrip']
             emit(events,s,'level_up',before=before_level,after=s['level'],features=features,style=s['build'].get('style'),subclass=s['build'].get('subclass'))
         elif command=='equip':
             weapon=args['weapon'];require(room=='camp' and weapon in s['build'].get('supported_weapons',[]) and weapon in WEAPONS,'PrepareSupportedGearAtCamp')
@@ -556,13 +586,24 @@ def apply(state,command,args,draw):
                 s['seconds']+=28800;s['last_long_rest_end']=s['seconds'];s['hero']['hp']=s['hero']['max_hp'];s['hit_dice']=s['level'];s['short_rest_open']=False
                 s['hero']['temp_hp']=0
                 if cls=='fighter':s['second_wind']=2
-                if cls=='wizard':s['spell_slots']=spell_slot_capacity(s['level']);s['arcane_recovery']=1
+                if cls=='wizard':
+                    s['spell_slots']=spell_slot_capacity(s['level']);s['arcane_recovery']=1;s['flags']['spell_preparation_open']=True;end_concentration(s['hero'])
                 if s['flags'].pop('mage_armor_until',None) is not None:s['hero']['ac']=s['hero'].get('unarmored_ac',12)
             else:
                 s['seconds']+=3600;s['short_rest_open']=True
                 if cls=='fighter':s['second_wind']=min(2,s['second_wind']+1)
             if cls=='fighter' and s['level']>=2:s['action_surge']=1
             emit(events,s,'rest',kind=kind,minutes=s['seconds']/60)
+        elif command=='prepare_spell':
+            require(room=='camp' and cls=='wizard' and flags.get('spell_preparation_open'),'SpellPreparationUnavailable')
+            spell=args.get('spell');want=args.get('prepared')
+            require(type(want) is bool and spell in s['build'].get('spellbook',[]) and spell in s['build'].get('implemented_spells',[]) and SPELLS.get(spell,{}).get('level',0)>0,'UnsupportedPreparedSpell')
+            prepared=s['build'].setdefault('prepared',[])
+            if want:
+                require(spell not in prepared and len(prepared)<prepared_capacity(s['level']),'PreparedSpellCapacityReachedOrDuplicate');prepared.append(spell);prepared.sort()
+            else:
+                require(spell in prepared,'SpellNotPrepared');prepared.remove(spell)
+            emit(events,s,'ability',ability='spell_preparation',spell=spell,prepared=want,count=len(prepared),capacity=prepared_capacity(s['level']))
         elif command=='arcane_recovery':
             require(room=='camp' and cls=='wizard' and s['short_rest_open'] and s.get('arcane_recovery',0)>0,'ArcaneRecoveryUnavailable')
             slot=int(args.get('slot_level',1));count=int(args.get('count',1));cap=ceil(s['level']/2)

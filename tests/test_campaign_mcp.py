@@ -13,7 +13,9 @@ class CampaignMCPTests(unittest.IsolatedAsyncioTestCase):
                 async with streamable_http_client(server.url+'/mcp',http_client=http) as (read,write):
                     async with ClientSession(read,write) as session:
                         await session.initialize();tools=await session.list_tools()
-                        self.assertIn('adventure.level_up',{t.name for t in tools.tools})
+                        names={t.name for t in tools.tools};self.assertIn('adventure.level_up',names);self.assertIn('world.describe',names)
+                        described=await session.call_tool('world.describe',arguments={});self.assertFalse(described.is_error,described.structured_content)
+                        self.assertIn('Fighter/Rogue/Wizard 1-3',described.structured_content['entry_instructions'])
                         joined=await session.call_tool('adventure.join',arguments={'operation_id':'mcp-join','arguments':{}})
                         self.assertFalse(joined.is_error,joined.structured_content)
                         revision=0;serial=0;call=None

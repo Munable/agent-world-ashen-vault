@@ -27,7 +27,7 @@ export function sample(before,after,cue,t){
  if(cue.name==='campaign.travel'){
   frame.entities=clone(after.entities);frame.entities.hero.position=pathPosition(d.start,[d.end],t);fx.path=[d.start,d.end];
  } else if(cue.name==='campaign.combat'){
-  const r=d.result,actor=d.actor;const attack=r?.attack_result||(r?.attack?r:null);
+  const r=d.result,actor=d.actor,attackActor=r?.attacker||actor;const attack=r?.attack_result||(r?.attack?r:null);
   let moving=actor,path=r?.traveled||[],moveT=t;
   if(d.command==='react'){
    moving=r.mover;path=r.movement?.traveled||[];moveT=attack?Math.max(0,(t-.6)/.4):t;
@@ -38,7 +38,7 @@ export function sample(before,after,cue,t){
   }
   if(attack){
    const target=r.target||r.mover;const attackT=d.command==='react'?Math.min(1,t/.6):t;
-   fx.attack={actor,target,start:d.before[actor]?.position,end:d.before[target]?.position,hit:attack.hit,damage:attack.damage,critical:attack.critical,progress:attackT};
+   fx.attack={actor:attackActor,target,start:d.before[attackActor]?.position,end:d.before[target]?.position,hit:attack.hit,damage:attack.damage,critical:attack.critical,progress:attackT};
    if(attackT>=.55&&frame.entities[target])frame.entities[target].hp=d.after[target].hp;
   }
  } else if(cue.name==='campaign.spell'){
@@ -55,7 +55,7 @@ export function sample(before,after,cue,t){
  else if(cue.name==='campaign.check')fx.text=(d.test?.mode==='advantage'?'优势 · ':d.test?.mode==='disadvantage'?'劣势 · ':'')+d.check+' '+d.test.total;
  else if(cue.name==='campaign.check_result')fx.text=d.success?'检定成功':'检定失败';
  else if(cue.name==='campaign.item')fx.text=d.outcome==='purchased'?'获得药水 · -50 金币':'已取得火种';
- else if(cue.name==='campaign.ability')fx.text='动作如潮 · 额外行动';
+ else if(cue.name==='campaign.ability'){const names={action_surge:'动作如潮',cunning_action:'灵巧动作',steady_aim:'Steady Aim',fast_hands:'Fast Hands',arcane_recovery:'Arcane Recovery',spell_preparation:'法术准备'};fx.text=names[d.ability]||d.ability||'职业能力';}
  return {frame,fx};
 }
 export class Playback{

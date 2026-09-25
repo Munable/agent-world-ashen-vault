@@ -71,7 +71,7 @@ function addLogs(events){
  for(const e of events){const d=e.cue.data.event;const li=document.createElement('li');let label=labels[e.cue.name]||e.cue.name;
   if(e.cue.name==='campaign.combat'){
    const r=d.result,a=r?.attack_result||(r?.attack?r:null);label=(d.origin==='scripted_npc'?'脚本 NPC':'玩家行动')+' · '+d.command;
-   if(a)label+=` · d20 ${a.attack.dice.join('/')} +${a.attack.modifier} = ${a.attack.total} · ${a.hit?'命中，伤害 '+a.damage:'未命中'}`;
+   if(r?.status==='awaiting_reaction')label+=' · 命中待防御反应';else if(r?.shield)label='Shield 反应 · '+(a?.hit?'仍命中':'攻击被挡开');else if(a)label+=` · d20 ${a.attack.dice.join('/')} +${a.attack.modifier} = ${a.attack.total} · ${a.hit?'命中，伤害 '+a.damage:'未命中'}`;
   }
   if(e.cue.name==='campaign.spell'){const r=d.result;label=r.spell+(r.damage!==undefined?' · '+r.damage+' 伤害':'');}
   if(e.cue.name==='campaign.check'){

@@ -41,6 +41,10 @@ def make_battle(state: dict, draw) -> dict:
     from .engine import apply
     hero=deepcopy(state['hero']);hero.update(position=[3,2],action=True,reaction=True,bonus_action=True,extra_actions=0)
     hero.pop('sapped_by',None)
+    if state['build'].get('class_key')=='wizard':
+        hero['shield_reaction_available']='shield' in state['build'].get('prepared',[])
+        hero['shield_slots']=state.get('spell_slots',{}).get('1',0)
+        hero['concentration_save_bonus']=state['build'].get('saves',{}).get('con',0)
     enemy=combatant('warden');enemy.update(id='enemy',name='执誓守卫',team='enemy',size='medium',position=[8,2],nonlethal=True)
     if state['flags'].get('delivered'):
         enemy.update(source='Original trial melee profile',name='守印者',hp=18,max_hp=18,attack_bonus=4,damage_bonus=2)

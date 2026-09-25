@@ -1,4 +1,5 @@
 """Private campaign adapter: no new login protocol, public RPG state, or client RNG."""
+import json
 from hashlib import sha256
 from agent_world import WorldDefinition, FunctionSpec, StateRule, FunctionOutcome, ViewSpec, PresentationCue
 from agent_world.errors import RuleViolation
@@ -54,7 +55,22 @@ def handler(command):
 
 def look(ctx,args):return FunctionOutcome({'scene':view(load(ctx))})
 def scene(ctx,args):return view(load(ctx))
-def bootstrap(ctx):return {'scene':view(load(ctx)),'rules_scope':'G2A constrained Fighter/Rogue/Wizard 1-3 solo growth; finite implemented spell/action list, not full SRD or co-op yet.'}
+def bootstrap(ctx):return {'scene':view(load(ctx)),'rules_scope':'G2 constrained Fighter/Rogue/Wizard 1-3 solo growth plus shared party preview; finite rule menu, not full SRD.'}
+
+def migrate_g2(ctx):
+    rows=ctx.conn.execute("SELECT scope,value_json,version FROM world_state WHERE universe=? AND state_key='state' AND deleted=0 AND substr(scope,1,9)='campaign:'",(ctx.universe,)).fetchall()
+    for row in rows:
+        state=json.loads(row['value_json'])
+        if int(state.get('version',1))>=2:continue
+        state['version']=2;state.setdefault('spell_slots',{'1':0,'2':0});state.setdefault('arcane_recovery',0)
+        build=state.setdefault('build',{});build.setdefault('class_key','fighter');build.setdefault('supported_weapons',['flail','morningstar','mace'])
+        hero=state.setdefault('hero',{});hero.setdefault('class_key','fighter');hero.setdefault('critical_threshold',20);hero.setdefault('remarkable_athlete',False)
+        battle=state.get('battle')
+        if battle and 'hero' in battle.get('actors',{}):
+            bh=battle['actors']['hero'];bh.setdefault('class_key','fighter');bh.setdefault('critical_threshold',20);bh.setdefault('remarkable_athlete',False)
+        reward=state.get('rewards',{}).get('seal_trial')
+        if reward is not None and int(reward.get('xp',0))==0:reward['xp']=600;state['xp']=int(state.get('xp',0))+600
+        ctx.set_state(row['scope'],'state',state,expected_version=int(row['version']))
 
 REV={'type':'integer','minimum':0};TURN={'type':'integer','minimum':1};TEXT={'type':'string','minLength':1,'maxLength':32};BOOL={'type':'boolean'}
 CELL={'type':'array','items':{'type':'integer','minimum':0,'maximum':13},'minItems':2,'maxItems':2}
@@ -76,18 +92,21 @@ register('rest',{'kind':{'enum':['short','long']}},('kind',),'Camp-only complete
 for name in ('spend_hit_die','second_wind','potion','action_surge','retire','recover_posture','buy_potion'):register(name)
 register('cunning_action',{'choice':{'enum':['dash','disengage']},'turn_id':TURN},('choice','turn_id'),'Rogue 2+: spend the current Bonus Action on Dash or Disengage.')
 register('steady_aim',{'turn_id':TURN},('turn_id',),'Rogue 3+: if you have not moved this turn, spend the Bonus Action, set Speed to 0, and gain Advantage on the next attack this turn.')
+register('fast_hands',{'choice':{'enum':['trial_winch']},'turn_id':TURN},('choice','turn_id'),'Thief 3: spend the current Bonus Action to Utilize the authored trial winch; the server applies its bounded object effect.')
 register('arcane_recovery',{'slot_level':{'type':'integer','minimum':1,'maximum':2},'count':{'type':'integer','minimum':1,'maximum':2}},('slot_level','count'),'Wizard only, after a completed short rest; recover slots within the SRD half-level rounded-up budget once per Long Rest.')
-register('cast',{'spell':{'enum':['mage_armor','magic_missile','ray_of_frost']},'target':TEXT,'slot_level':{'type':'integer','minimum':1,'maximum':2},'turn_id':TURN,'use_luck':BOOL},('spell',),'Cast only the finite implemented Wizard spell set. In combat use the current turn_id; the server spends slots, rolls attacks/damage, and applies effects.')
+register('prepare_spell',{'spell':TEXT,'prepared':BOOL},('spell','prepared'),'Wizard only during the preparation window opened by a completed Long Rest; only the finite implemented spell set can be prepared.')
+register('cast',{'spell':{'enum':['mage_armor','magic_missile','ray_of_frost','blur','scorching_ray']},'target':TEXT,'slot_level':{'type':'integer','minimum':1,'maximum':2},'turn_id':TURN,'use_luck':BOOL},('spell',),'Cast only the finite implemented Wizard spell set. In combat use the current turn_id; the server spends slots, rolls attacks/damage, and applies effects.')
 for name in ('dash','dodge','disengage','drop_prone','stand','end_turn','approach','withdraw','escape'):register(name,{'turn_id':TURN},('turn_id',))
 register('move',{'turn_id':TURN,'path':{'type':'array','items':CELL,'minItems':1,'maxItems':12}},('turn_id','path'))
 register('attack',{'turn_id':TURN,'target':TEXT,'knockout':BOOL,'use_luck':BOOL},('turn_id','target'))
-register('react',{'window_id':TEXT,'choice':{'enum':['attack','decline']},'knockout':BOOL,'use_luck':BOOL},('window_id','choice'))
+register('react',{'window_id':TEXT,'choice':{'enum':['attack','decline','shield']},'knockout':BOOL,'use_luck':BOOL},('window_id','choice'),'Resolve only the current offered reaction window. Shield is offered only after a qualifying hit roll and spends the Wizard reaction/slot before damage is finalized.')
 SPECS.extend(PARTY_SPECS)
 INITIAL=new_campaign('schema-example')
 STATE=schema({key: {'type': 'integer' if type(value) is int else 'string' if isinstance(value,str) else 'array' if isinstance(value,list) else 'object' if isinstance(value,dict) else 'boolean' if type(value) is bool else ['object','string','null']} for key,value in INITIAL.items()},tuple(INITIAL))
-WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2 preview',tuple(SPECS),state_rules=(StateRule('campaign:','state',STATE),PARTY_STATE_RULE),
+WORLD=WorldDefinition('ashen-vault-ember','Ashen Vault: Lost Ember G2 preview',tuple(SPECS),version=2,state_version=2,
+    state_rules=(StateRule('campaign:','state',STATE),PARTY_STATE_RULE),migrations={2:migrate_g2},
     state_authorizer=owned,bootstrap=bootstrap,views=(ViewSpec('adventure',scene,timeline=True),),
     entry_instructions='Use the user-held token for this universe. Read adventure.look, choose one audited class on adventure.join, then use current offered tools/revision. '
-    'Fighter/Rogue/Wizard 1-3 constrained solo campaign plus a 1-3 identity shared-state co-op preview; finite rules, not complete SRD. Server rolls and resolves all actions. '
+    'Fighter/Rogue/Wizard 1-3 constrained solo campaign plus a 1-3 identity shared-state co-op preview; finite rules, not complete SRD. Wizard preparation, components, slots, Blur concentration and Shield hit-reaction continuation are server-authoritative. '
     'Only the user decides their reaction/ability windows; NPCs follow rules with a bounded driver. Reuse operation_id for a retry. '
     'World time, combat turns and animation time are different. No FreeAPI or required background model. Never reveal credentials.')

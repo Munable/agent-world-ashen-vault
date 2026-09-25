@@ -178,3 +178,28 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(new['winner'],'warden')
         self.assertEqual(new['actors']['ally']['hp'],5)
 
+    def shield_state(self):
+        state=battle();state['order']=['sentinel','warden'];state['index']=0;state['turn_id']=1
+        state['actors']['sentinel'].update(position=[4,2],action=True,movement=30)
+        state['actors']['warden'].update(position=[3,2],shield_reaction_available=True,shield_slots=1,reaction=True)
+        return state
+
+    def test_shield_reaction_pauses_after_hit_and_can_turn_it_into_miss(self):
+        state=self.shield_state();hp=state['actors']['warden']['hp']
+        state,result=apply(state,'sentinel','attack',{'turn_id':1,'target':'warden','knockout':False},dice(14))
+        self.assertEqual(result['status'],'awaiting_reaction');self.assertEqual(state['actors']['warden']['hp'],hp)
+        window=state['pending']['window_id']
+        state,result=apply(state,'warden','react',{'window_id':window,'choice':'shield'},dice())
+        self.assertFalse(result['attack_result']['hit']);self.assertEqual(state['actors']['warden']['hp'],hp)
+        self.assertEqual((state['actors']['warden']['ac'],state['actors']['warden']['shield_slots'],state['actors']['warden']['reaction']),(21,0,False))
+        state,_=apply(state,'sentinel','end_turn',{'turn_id':state['turn_id']},dice())
+        self.assertEqual(state['actors']['warden']['ac'],16)
+
+    def test_declining_shield_preserves_reaction_and_takes_stored_attack(self):
+        state=self.shield_state();hp=state['actors']['warden']['hp']
+        state,_=apply(state,'sentinel','attack',{'turn_id':1,'target':'warden','knockout':False},dice(14))
+        window=state['pending']['window_id']
+        state,result=apply(state,'warden','react',{'window_id':window,'choice':'decline'},dice(3))
+        self.assertTrue(result['attack_result']['hit']);self.assertLess(state['actors']['warden']['hp'],hp)
+        self.assertEqual((state['actors']['warden']['shield_slots'],state['actors']['warden']['reaction']),(1,True))
+
