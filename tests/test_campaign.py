@@ -413,7 +413,7 @@ class CampaignTests(unittest.TestCase):
         s['room']='shrine';s['flags'].update(delivered=True,dread_cleared=True,guard_access=True)
         s['battle']=make_battle(s,dice(2,18));b=s['battle'];b['order']=['enemy','hero'];b['index']=0;b['round']=1;b['turn_id']=1
         b['actors']['enemy'].update(position=[4,2],action=True,movement=30);b['actors']['hero']['position']=[3,2]
-        hp=b['actors']['hero']['hp'];events=[];advance_npc(s,events,dice(14))
+        hp=b['actors']['hero']['hp'];events=[];advance_npc(s,events,dice(12))
         self.assertEqual(s['battle']['pending']['kind'],'shield')
         self.assertTrue(any(a['arguments'].get('choice')=='shield' for a in available(s)))
         window=s['battle']['pending']['window_id'];s,_=command(s,'react',dice(),window_id=window,choice='shield')
