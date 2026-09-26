@@ -1,60 +1,35 @@
-# G2 当前规则边界
+# G2 Phase A：当前规则边界
 
-版本：0.3.0a1。规则基线仍固定为 SRD 5.2.1。本文描述已经由服务器裁决并有测试覆盖的有限菜单，不是整个 SRD、完整三个职业或通用 DM 系统。
+源码 `e9d345b3` / 0.3.0a1，规则来源固定为 SRD 5.2.1。本文描述有限实现，不宣称完整 SRD、完整职业或通用自然语言 DM。
 
-## 成长
+## 正常流程与规则夹具
 
-三个固定起始构筑都从 1 级开始，并沿同一个“失落火种”冒险成长。
+现有六区域单人主链支持 Fighter / Rogue / Wizard，从一级到二级，完成守印考验后取得三级升级。`campaign.available` 在完成三级升级后不再提供后续冒险动作。
 
-| 职业 | 2级 | 3级 |
-|---|---|---|
-| Fighter | Action Surge、Tactical Mind | 固定 Champion；扩展重击、体能相关实现 |
-| Rogue | Cunning Action | 固定 Thief；Sneak Attack 2d6、Steady Aim、Fast Hands、攀爬/跳跃数据 |
-| Wizard | Scholar/Arcana 专精数据、更多一环位 | 固定 Evoker；二环位、Potent Cantrip、有限 Evocation 法术 |
-
-升级只增加最大 HP 和对应资源，不免费恢复当前 HP。
-
-## Rogue
-
-Sneak Attack 由服务器判断优势/盟友支持、武器条件和“每回合一次”标记。Vex 命中后给下一次对应攻击优势，并在实际使用或规则时限后清理。
-
-Cunning Action 花 Bonus Action 执行已实现的 Dash / Disengage。Steady Aim 要求本回合尚未移动，花 Bonus Action，把本回合 Speed 归零并给下一次攻击优势。
-
-Thief 的 Fast Hands 不是标签：当前作者场景在守印考验中提供一个可利用的绞盘，花 Bonus Action 产生受规则约束的短期减速。Second-Story Work 目前兑现攀爬速度和跳跃属性数据，但没有因此声称实现所有环境攀爬/跳跃裁定。
-
-## Wizard
-
-当前法术闭包只包括：
-
-- Cantrip：Ray of Frost
-- 1环：Mage Armor、Magic Missile、Shield
-- 2环：Blur、Scorching Ray
-
-法术书可以记录更多名字，但未列入实现集合的法术不能被准备或施放，也不会被近似成“差不多成功”。
-
-法术位和 Arcane Recovery 是持久资源。完成 Long Rest 后打开一次准备窗口；只能在法术书、实现集合和准备容量范围内增删已准备法术。
-
-Mage Armor 检查当前构筑所需的奥术法器来源。Shield 不是普通回合按钮：攻击先完成命中骰，若满足条件则生成“命中后、伤害前”的反应窗口；玩家可施放或放弃，随后服务器用同一次攻击骰继续结算，绝不重掷攻击。
-
-Blur 使用专注。攻击 Blur 目标受到劣势；目标受到伤害时按服务器骰进行专注豁免，失败或失去行动能力会结束专注。当前没有宣称实现所有专注来源与所有法术组件边界。
+**处理器已实现，不等于普通玩法已到达。** Fast Hands、Steady Aim、Blur、Scorching Ray、Potent Cantrip 等三级机制的定点测试包含直接设置 XP 或构造战斗状态；不能写成玩家已在正常主链使用过全部三级能力。当前不把补三级后内容列为 Runtime 必做项。
 
 ## Fighter
 
-G1 的 Second Wind、Action Surge、Tactical Mind、Sap、两种 2 级战斗风格继续保留。3 级固定进入 Champion；19–20 的扩展重击由攻击规则直接判断，Remarkable Athlete 已用于先攻与作者 Athletics 检定。**重击后立即移动至多一半 Speed 且不触发机会攻击的部分尚未开放**，因此 Champion 仍是部分闭包。
+保留 Second Wind、Action Surge、Tactical Mind、Sap 及二级的 Defense／Dueling 选择。三级固定 Champion，扩展重击参与攻击判定，Remarkable Athlete 的先攻／Athletics 部分有实现；重击后免机会攻击移动的部分未开放。不是完整 Champion。
 
-## 合作预览
+## Rogue
 
-合作状态存放于 party:<id>，不是“每人一个单机存档加队伍名称”。每个成员有独立身份和 seat，共享 battle / rewards / rest_requests / fictional time。
+Sneak Attack 由武器条件、优势／盟友支持和每回合标记判定；Vex 影响后续对应攻击。Cunning Action 当前为附赠动作 Dash / Disengage，不包含完整 Hide。
 
-当前合作玩法重点验收身份边界、轮到谁谁行动、NPC 世界控制、奖励一次性分配和多人休息共识。它还不是完整多人化六区域战役，也没有为每个职业复制全部单人菜单。
+三级有 Steady Aim 和 Fast Hands 处理器。trial_winch 在构造的三级遭遇中消费附赠动作并施加有界减速；正常主链的守印考验发生在二级，故没有据此证明三级 Fast Hands 的正常冒险可达性。Second-Story Work 当前只记录攀爬速度／跳跃属性，不构成完整环境规则。
 
-## 仍然不支持
+## Wizard
 
-完整 SRD 法术表、完整远程武器与装备切换、完整 Hide/Search/Help/Ready、自由文本 DM 裁定、所有状态与死亡后救助流程、完整多人探索任务、角色编辑器和 1–20 级成长都不在 0.3.0a1 的承诺范围内。
+有限实现集合：Ray of Frost；Mage Armor、Magic Missile、Shield；Blur、Scorching Ray。spellbook 中其他名字不代表可准备或可施放。准备窗口、容量、法术位和 Arcane Recovery 由规则约束；组件检查目前覆盖固定构筑的法器条件，不代表所有组件／占手情况。
 
+Shield 在符合条件的命中后、伤害前保存反应窗口，玩家通过结构化 react 选择继续，复用原攻击骰。Blur 的专注、受伤豁免和相关劣势有有限实现；二环及 Evoker 测试不等于正常主链已有三级后施法流程。
 
-## G1 存档与共享状态基础设施
+升级不隐含免费治疗当前 HP。具体资源与动作语义以代码及对应测试为准，本轮不重新宣称完整规则审计通过。
 
-G2 将 world/function/view 合同显式升到 v2，但保持 state_version=1 并接受 G1 顶层状态形状。旧存档在读取时按原 Fighter 规范化，在下一次真实写入时持久为 G2 数据；已完成旧守印考验的 0 XP 记录补为当前 600 XP，而不换 role_id、不免费治疗。再次 `adventure.join` 不能把旧 Fighter 改成别的职业。
+## 共享状态与旧存档
 
-party 成员授权使用 Agent World 0.14.0 的受限 `authorization_state` 查询完成。该查询只允许在 `state_authorizer` 回调执行期间使用；世界不再直接读取 SQLite 连接。
+party:<id> 保存 1–3 独立身份的成员、battle、奖励账本、休息请求与共享时间；资格通过 Runtime 0.14.0 的授权专用查询检查。只验证共享战斗、回合控制和休息共识，不代表完整多人探索、信息交流或公裁系统。
+
+world/function/view 合同为 v2，state_version 保持 1，旧 G1 Fighter 通过兼容 schema 与惰性规范化延续，下一次真实写入才持久化新字段。旧已完成守印奖励补为 600 XP，不重建身份、切职业或免费治疗。
+
+未实现的完整法术、远程装备、Hide/Search/Help/Ready、死亡救助、多人战役和更高等级不作为 Runtime 的基础规则缺口。后续是否扩展由独立世界需求决定。来源与许可仍见 NOTICE / srd-source，测试证据见 [G2_VALIDATION](G2_VALIDATION.md)。
